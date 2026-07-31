@@ -2,8 +2,8 @@ import { Link } from "react-router-dom";
 import { Brand } from "@/components/Brand";
 
 export function PrivacyPage() {
-  const supportEmail =
-    import.meta.env.VITE_SUPPORT_EMAIL?.trim() || "support@localhost";
+  const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL?.trim() ||
+    "support@localhost";
 
   return (
     <main className="legal-page">
@@ -37,11 +37,11 @@ export function PrivacyPage() {
           information.
         </p>
 
-        <h2>SMS verification</h2>
+        <h2>Phone verification</h2>
         <p>
-          Public deployments use Twilio Verify to send and validate one-time
-          codes. Twilio receives the phone number and delivery metadata needed
-          for that purpose and processes it under its own privacy terms.
+          This deployment generates and validates one-time codes on its own
+          server. It does not send your phone number to an external SMS
+          verification provider.
         </p>
 
         <h2>Optional contact discovery</h2>
@@ -51,9 +51,9 @@ export function PrivacyPage() {
           deployment. The server returns only which submitted numbers belong to
           users who have opted in to being discoverable. It does not return
           names, companies, or ledger data, and it does not store the submitted
-          contact list. Aggregate request and batch-size counts—not the submitted
-          numbers—are retained to prevent abuse. You can keep using Hisaab and
-          add a party manually without granting contacts permission.
+          contact list. Aggregate request and batch-size counts—not the
+          submitted numbers—are retained to prevent abuse. You can keep using
+          Hisaab and add a party manually without granting contacts permission.
         </p>
 
         <h2>Retention and control</h2>

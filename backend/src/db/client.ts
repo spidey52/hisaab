@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { Pool, types } from "pg";
+import { env } from "../config/env";
 import * as schema from "./schema";
 
 types.setTypeParser(20, (value) => Number(value));
@@ -8,51 +9,11 @@ types.setTypeParser(1700, (value) => Number(value));
 types.setTypeParser(1082, (value) => value);
 types.setTypeParser(1184, (value) => value);
 
-function numberFromEnvironment(
-  key: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-) {
-  const value = Number(process.env[key]);
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(maximum, Math.max(minimum, Math.trunc(value)));
-}
-
-function getDatabaseUrl() {
-  if (process.env.DATABASE_URL?.trim()) {
-    return process.env.DATABASE_URL.trim();
-  }
-  const host = process.env.PGHOST ?? "127.0.0.1";
-  const port = numberFromEnvironment("PGPORT", 5432, 1, 65_535);
-  const database = process.env.PGDATABASE ?? "hisaab";
-  const user = encodeURIComponent(process.env.PGUSER ?? "hisaab");
-  const password = encodeURIComponent(process.env.PGPASSWORD ?? "hisaab");
-  return `postgresql://${user}:${password}@${host}:${port}/${database}`;
-}
-
 export const pool = new Pool({
-  connectionString: getDatabaseUrl(),
-  max: numberFromEnvironment("DATABASE_POOL_SIZE", 10, 1, 50),
-  idleTimeoutMillis: numberFromEnvironment(
-    "DATABASE_IDLE_TIMEOUT_MS",
-    30_000,
-    1_000,
-    600_000,
-  ),
-  connectionTimeoutMillis: numberFromEnvironment(
-    "DATABASE_CONNECT_TIMEOUT_MS",
-    5_000,
-    500,
-    60_000,
-  ),
-  ssl:
-    process.env.DATABASE_SSL === "true"
-      ? {
-          rejectUnauthorized:
-            process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false",
-        }
-      : undefined,
+  connectionString: env.DATABASE_URL,
+  max: env.DATABASE_POOL_SIZE,
+  idleTimeoutMillis: env.DATABASE_IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: env.DATABASE_CONNECT_TIMEOUT_MS,
 });
 
 pool.on("error", (error) => {

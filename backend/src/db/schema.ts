@@ -320,9 +320,7 @@ export const otpChallenges = pgTable(
   {
     id: text("id").primaryKey(),
     phoneE164: text("phone_e164").notNull(),
-    provider: text("provider").notNull(),
-    providerReference: text("provider_reference"),
-    codeHash: text("code_hash"),
+    codeHash: text("code_hash").notNull(),
     requestedIpHash: text("requested_ip_hash").notNull(),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(5),

@@ -1,10 +1,7 @@
-import { config } from "dotenv";
-import { resolve } from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { env } from "./config/env";
 import { onError } from "./middlewares/error";
-
-config({ path: resolve(import.meta.dir, "../.env") });
 
 const { apiRoutes } = await import("./routes/index");
 
@@ -22,7 +19,7 @@ app.use(
 
 app.route("/api", apiRoutes);
 
-const port = Number(process.env.PORT ?? 3001);
+const port = env.PORT;
 
 console.log(`Hisaab API listening on http://localhost:${port}`);
 

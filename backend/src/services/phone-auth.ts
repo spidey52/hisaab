@@ -7,6 +7,7 @@ import {
 } from "node:crypto";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { env } from "../config/env";
 import {
   authEvents,
   companies,
@@ -41,8 +42,7 @@ export type SessionIdentity = {
 type ChallengeRow = {
   id: string;
   phone_e164: string;
-  provider: "console" | "twilio_verify";
-  code_hash: string | null;
+  code_hash: string;
   attempts: number;
   max_attempts: number;
 };
@@ -88,20 +88,14 @@ export function maskPhoneNumber(phoneE164: string) {
 }
 
 export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
+  assertLocalOtpEnabled();
   const phoneE164 = normalizePhoneNumber(phoneInput);
 
   const ipHash = privateHash(clientIpAddress(request));
   const phoneHash = privateHash(phoneE164);
   const challengeId = crypto.randomUUID();
-  const provider = otpProvider();
-  let codeHash: string | null = null;
-  let developmentCode: string | undefined;
-
-  if (provider === "console") {
-    assertConsoleOtpIsLocalOnly();
-    developmentCode = String(randomInt(100_000, 1_000_000));
-    codeHash = hashOtp(challengeId, phoneE164, developmentCode);
-  }
+  const developmentCode = String(randomInt(100_000, 1_000_000));
+  const codeHash = hashOtp(challengeId, phoneE164, developmentCode);
 
   let blocked: RateLimitSnapshot | null = null;
   try {
@@ -166,8 +160,6 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
       await client.insert(otpChallenges).values({
         id: challengeId,
         phoneE164,
-        provider,
-        providerReference: null,
         codeHash,
         requestedIpHash: ipHash,
         maxAttempts: MAX_OTP_ATTEMPTS,
@@ -181,33 +173,13 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
     throw error;
   }
 
-  if (provider === "console") {
-    console.info(
-      `[Hisaab local OTP] ${
-        maskPhoneNumber(phoneE164)
-      } code ${developmentCode}`,
-    );
-  } else {
-    try {
-      const providerReference = await startTwilioVerification(phoneE164);
-      await db
-        .update(otpChallenges)
-        .set({ providerReference })
-        .where(
-          and(
-            eq(otpChallenges.id, challengeId),
-            isNull(otpChallenges.consumedAt),
-          ),
-        );
-    } catch (error) {
-      await db
-        .delete(otpChallenges)
-        .where(eq(otpChallenges.id, challengeId));
-      throw error;
-    }
-  }
+  console.info(
+    `[Hisaab local OTP] ${maskPhoneNumber(phoneE164)} code ${developmentCode}`,
+  );
 
-  await logAuthEvent(phoneHash, ipHash, "otp_requested", { provider });
+  await logAuthEvent(phoneHash, ipHash, "otp_requested", {
+    delivery: "console",
+  });
   await cleanupExpiredAuthData();
 
   return {
@@ -226,6 +198,7 @@ export async function verifyPhoneOtp(
   codeInput: unknown,
   request: Request,
 ) {
+  assertLocalOtpEnabled();
   const challengeId = typeof challengeIdInput === "string"
     ? challengeIdInput.trim()
     : "";
@@ -251,7 +224,6 @@ export async function verifyPhoneOtp(
     .returning({
       id: otpChallenges.id,
       phone_e164: otpChallenges.phoneE164,
-      provider: otpChallenges.provider,
       code_hash: otpChallenges.codeHash,
       attempts: otpChallenges.attempts,
       max_attempts: otpChallenges.maxAttempts,
@@ -264,9 +236,12 @@ export async function verifyPhoneOtp(
     );
   }
 
-  const approved = challenge.provider === "console"
-    ? verifyLocalCode(challengeId, phoneE164, code, challenge.code_hash)
-    : await checkTwilioVerification(phoneE164, code);
+  const approved = verifyLocalCode(
+    challengeId,
+    phoneE164,
+    code,
+    challenge.code_hash,
+  );
   const ipHash = privateHash(clientIpAddress(request));
   const phoneHash = privateHash(phoneE164);
 
@@ -448,21 +423,9 @@ async function createSessionForPhone(phoneE164: string, request: Request) {
   return { ...identity, token: rawToken };
 }
 
-function otpProvider(): "console" | "twilio_verify" {
-  return process.env.OTP_PROVIDER === "console" ? "console" : "twilio_verify";
-}
-
-function assertConsoleOtpIsLocalOnly() {
-  if (process.env.ALLOW_INSECURE_LOCAL_OTP !== "true") {
-    throw new Error(
-      "Console OTP is disabled. Configure Twilio Verify or explicitly enable local OTP.",
-    );
-  }
-  const baseUrl = new URL(
-    process.env.PUBLIC_BASE_URL ?? "http://localhost:3000",
-  );
-  if (!["localhost", "127.0.0.1", "::1"].includes(baseUrl.hostname)) {
-    throw new Error("Console OTP can only be used with a localhost base URL.");
+function assertLocalOtpEnabled() {
+  if (!env.OTP_IN_RESPONSE) {
+    throw new PhoneAuthError("OTP authentication is not configured.", 503);
   }
 }
 
@@ -486,101 +449,6 @@ function verifyLocalCode(
 
 function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-async function startTwilioVerification(phoneE164: string) {
-  const credentials = twilioCredentials();
-  const body = new URLSearchParams({ To: phoneE164, Channel: "sms" });
-  const response = await fetch(
-    `https://verify.twilio.com/v2/Services/${
-      encodeURIComponent(
-        credentials.serviceSid,
-      )
-    }/Verifications`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${
-          Buffer.from(
-            `${credentials.accountSid}:${credentials.authToken}`,
-          ).toString("base64")
-        }`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body,
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
-  const result = (await response.json()) as {
-    sid?: string;
-    status?: string;
-    message?: string;
-  };
-  if (!response.ok || result.status !== "pending" || !result.sid) {
-    console.error("Twilio Verify start failed", {
-      status: response.status,
-      providerMessage: result.message?.slice(0, 200),
-    });
-    throw new PhoneAuthError(
-      "We could not send a code right now. Please try again shortly.",
-      502,
-    );
-  }
-  return result.sid;
-}
-
-async function checkTwilioVerification(phoneE164: string, code: string) {
-  const credentials = twilioCredentials();
-  const response = await fetch(
-    `https://verify.twilio.com/v2/Services/${
-      encodeURIComponent(
-        credentials.serviceSid,
-      )
-    }/VerificationCheck`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${
-          Buffer.from(
-            `${credentials.accountSid}:${credentials.authToken}`,
-          ).toString("base64")
-        }`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ To: phoneE164, Code: code }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
-  const result = (await response.json()) as {
-    status?: string;
-    message?: string;
-  };
-  if (response.ok) return result.status === "approved";
-  if (response.status >= 500) {
-    console.error("Twilio Verify check failed", {
-      status: response.status,
-      providerMessage: result.message?.slice(0, 200),
-    });
-    throw new PhoneAuthError(
-      "Verification is temporarily unavailable. Please try again.",
-      502,
-    );
-  }
-  return false;
-}
-
-function twilioCredentials() {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
-  if (!accountSid || !authToken || !serviceSid) {
-    throw new Error(
-      "Twilio Verify credentials are required when OTP_PROVIDER is twilio_verify.",
-    );
-  }
-  return { accountSid, authToken, serviceSid };
 }
 
 async function logAuthEvent(

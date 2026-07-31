@@ -27,11 +27,10 @@ services:
       - path: ./backend/.env
         required: false
     environment:
+      NODE_ENV: development
       PORT: "3001"
       SESSION_SECRET: ${SESSION_SECRET:-local-only-hisaab-session-secret-change-for-production}
-      OTP_PROVIDER: ${OTP_PROVIDER:-console}
-      ALLOW_INSECURE_LOCAL_OTP: "true"
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      OTP_IN_RESPONSE: ${OTP_IN_RESPONSE:-true}
       TRUST_PROXY: "false"
       # Host/shell DATABASE_URL wins; otherwise backend/.env; else compose db.
       DATABASE_URL: ${DATABASE_URL:-postgresql://hisaab:hisaab_local_password@db:5432/hisaab}

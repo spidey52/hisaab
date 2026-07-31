@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
+import { env } from "../config/env";
 
 export function clientIpAddress(request: Request) {
-  if (process.env.TRUST_PROXY === "true") {
+  if (env.TRUST_PROXY) {
     const realIp = request.headers.get("x-real-ip");
     if (realIp) return realIp.trim();
     const forwarded = request.headers.get("x-forwarded-for");
@@ -17,12 +18,7 @@ export function privateHash(value: string) {
 }
 
 export function authenticationSecret() {
-  const secret = process.env.SESSION_SECRET;
-  if (secret && secret.length >= 32) return secret;
-  if (process.env.NODE_ENV !== "production") {
-    return "hisaab-development-secret-change-before-production";
-  }
-  throw new Error("SESSION_SECRET must contain at least 32 characters.");
+  return env.SESSION_SECRET;
 }
 
 export type ApiErrorOptions = {

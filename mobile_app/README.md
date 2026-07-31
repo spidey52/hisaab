@@ -50,10 +50,9 @@ server's session-cookie contract.
 
 ## Local testing OTP
 
-When the local server uses `OTP_PROVIDER=console`, it returns a
-`developmentCode`. The app clearly marks testing mode and pre-fills that code.
-Production Twilio responses do not contain the field, so no code is displayed
-or pre-filled.
+When the server uses `OTP_IN_RESPONSE=true`, it returns a `developmentCode`.
+The app clearly marks testing mode and pre-fills that code. When the setting is
+false or omitted, the code is available only in the backend logs.
 
 ## Contacts privacy
 
@@ -106,7 +105,7 @@ flutter build ipa --release \
 ```
 
 Never commit signing certificates, provisioning profiles, keystores, API
-credentials, Twilio credentials, or session secrets.
+credentials, or session secrets.
 
 ## Structure
 
