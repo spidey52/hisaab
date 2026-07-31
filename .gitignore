@@ -1,0 +1,21 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*~
+
+# Local env at repo root (webapp/.env is covered by webapp/.gitignore)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# FVM (keep config, ignore SDK cache)
+**/.fvm/flutter_sdk
+**/.fvm/versions/
+
+# Large local artifacts
+*.apk
+*.aab
+*.ipa

@@ -1,0 +1,16 @@
+{
+  "name": "Hisaab",
+  "short_name": "Hisaab",
+  "description": "A simple customer and supplier ledger.",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#fcfdfb",
+  "theme_color": "#08783e",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }
+  ]
+}

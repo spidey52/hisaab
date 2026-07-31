@@ -1,0 +1,91 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://hisaab:hisaab_test_password@127.0.0.1:5432/hisaab_test
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: hisaab_test
+          POSTGRES_USER: hisaab
+          POSTGRES_PASSWORD: hisaab_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hisaab -d hisaab_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+          cache-dependency-path: webapp/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:migrate
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm test
+
+  mobile-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.6
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+      - name: Verify release API guard
+        run: |
+          encoded="$(printf '%s' 'HISAAB_API_URL=https://api.example.com' | base64 -w 0)"
+          CONFIGURATION=Release DART_DEFINES="$encoded" /bin/sh tool/verify_release_api.sh
+          invalid="$(printf '%s' 'HISAAB_API_URL=https://private.example.ts.net' | base64 -w 0)"
+          if CONFIGURATION=Release DART_DEFINES="$invalid" /bin/sh tool/verify_release_api.sh; then
+            echo "Private release URL was unexpectedly accepted." >&2
+            exit 1
+          fi
+      - run: flutter build apk --debug --dart-define=HISAAB_API_URL=https://api.example.com
+
+  mobile-ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.6
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build ios --simulator --debug --dart-define=HISAAB_API_URL=https://api.example.com

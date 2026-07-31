@@ -1,0 +1,89 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: hisaab
+      POSTGRES_USER: hisaab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hisaab -d hisaab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - hisaab_postgres:/var/lib/postgresql/data
+    pids_limit: 200
+    networks:
+      - database
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: hisaab
+      PGUSER: hisaab
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+      OTP_PROVIDER: twilio_verify
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:?Set TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:?Set TWILIO_AUTH_TOKEN}
+      TWILIO_VERIFY_SERVICE_SID: ${TWILIO_VERIFY_SERVICE_SID:?Set TWILIO_VERIFY_SERVICE_SID}
+      PUBLIC_BASE_URL: https://${DOMAIN:?Set DOMAIN}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:?Set SUPPORT_EMAIL}
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+    expose:
+      - "3000"
+    pids_limit: 200
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - frontend
+      - database
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: always
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    pids_limit: 200
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - frontend
+
+volumes:
+  hisaab_postgres:
+  caddy_data:
+  caddy_config:
+
+networks:
+  frontend:
+  database:
+    internal: true

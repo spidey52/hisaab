@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hisaab
+      POSTGRES_USER: hisaab
+      POSTGRES_PASSWORD: hisaab_local_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hisaab -d hisaab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - hisaab_local_postgres:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5434:5432"
+      - "100.77.37.100:5434:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: hisaab
+      PGUSER: hisaab
+      PGPASSWORD: hisaab_local_password
+      DATABASE_POOL_SIZE: "10"
+      SESSION_SECRET: local-only-hisaab-session-secret-change-for-production
+      OTP_PROVIDER: console
+      ALLOW_INSECURE_LOCAL_OTP: "true"
+      PUBLIC_BASE_URL: http://localhost:3000
+      ADDITIONAL_ALLOWED_ORIGINS: ${ADDITIONAL_ALLOWED_ORIGINS:-}
+      COOKIE_SECURE: "false"
+      TRUST_PROXY: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  hisaab_local_postgres:
