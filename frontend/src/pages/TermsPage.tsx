@@ -1,9 +1,9 @@
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { Brand } from "@/components/Brand";
 
 export function TermsPage() {
-  const supportEmail =
-    import.meta.env.VITE_SUPPORT_EMAIL?.trim() || "support@localhost";
+  const supportEmail = import.meta.env.VITE_SUPPORT_EMAIL?.trim() ||
+    "support@localhost";
 
   return (
     <main className="legal-page">
@@ -36,8 +36,8 @@ export function TermsPage() {
 
         <h2>Financial accuracy</h2>
         <p>
-          Hisaab is a record-keeping aid, not accounting, tax, legal, lending, or
-          banking advice. Review entries and exports before relying on them.
+          Hisaab is a record-keeping aid, not accounting, tax, legal, lending,
+          or banking advice. Review entries and exports before relying on them.
           Recorded Cash and Bank labels describe customer-linked movements and
           may not equal real-world account balances.
         </p>
@@ -45,8 +45,8 @@ export function TermsPage() {
         <h2>Availability and backups</h2>
         <p>
           The service may be interrupted for maintenance or circumstances beyond
-          the operator&apos;s control. Use the export feature and keep independent
-          backups appropriate to your business.
+          the operator&apos;s control. Use the export feature and keep
+          independent backups appropriate to your business.
         </p>
 
         <h2>Account closure and contact</h2>

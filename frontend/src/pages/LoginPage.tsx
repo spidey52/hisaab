@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
+import { useRouter, useSearch } from "@tanstack/react-router";
 import { Brand } from "@/components/Brand";
 import { apiFetch, setSessionToken } from "@/lib/api-client";
 
@@ -22,6 +23,8 @@ type OtpRequest = {
 };
 
 export function LoginPage() {
+  const router = useRouter();
+  const { redirect } = useSearch({ from: "/login" });
   const [phone, setPhone] = useState("+91 ");
   const [challenge, setChallenge] = useState<OtpRequest | null>(null);
   const [code, setCode] = useState("");
@@ -93,7 +96,8 @@ export function LoginPage() {
         return;
       }
       setSessionToken(body.token, body.user?.phoneE164 ?? challenge.phoneE164);
-      window.location.replace("/app");
+      const destination = redirect?.startsWith("/app") ? redirect : "/app";
+      router.history.replace(destination);
     } catch {
       setError("Check your connection and try again.");
     } finally {
@@ -139,84 +143,88 @@ export function LoginPage() {
             : "Enter a mobile number with country code. Indian numbers may start with +91."}
         </p>
 
-        {challenge ? (
-          <form onSubmit={verifyCode} className="login-form">
-            <label>
-              <span>One-time code</span>
-              <input
-                autoFocus
-                value={code}
-                onChange={(event) =>
-                  setCode(event.target.value.replace(/\D/g, "").slice(0, 10))
-                }
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="6-digit code"
-                minLength={4}
-                maxLength={10}
-                required
-              />
-            </label>
-            {challenge.developmentCode ? (
-              <div className="local-otp-note">
-                Local test code: <strong>{challenge.developmentCode}</strong>
+        {challenge
+          ? (
+            <form onSubmit={verifyCode} className="login-form">
+              <label>
+                <span>One-time code</span>
+                <input
+                  autoFocus
+                  value={code}
+                  onChange={(event) =>
+                    setCode(event.target.value.replace(/\D/g, "").slice(0, 10))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                  minLength={4}
+                  maxLength={10}
+                  required
+                />
+              </label>
+              {challenge.developmentCode
+                ? (
+                  <div className="local-otp-note">
+                    Local test code:{" "}
+                    <strong>{challenge.developmentCode}</strong>
+                  </div>
+                )
+                : null}
+              {error ? <LoginError message={error} /> : null}
+              <button
+                className="button button-primary large"
+                disabled={loading || code.length < 4}
+              >
+                {loading ? <LoaderCircle className="spin" /> : <ArrowRight />}
+                Verify and open Hisaab
+              </button>
+              <div className="login-secondary-actions">
+                <button
+                  type="button"
+                  className="quiet-link"
+                  onClick={() => {
+                    setChallenge(null);
+                    setCode("");
+                    setError("");
+                  }}
+                >
+                  <Pencil /> Change number
+                </button>
+                <button
+                  type="button"
+                  className="quiet-link"
+                  disabled={countdown > 0 || loading}
+                  onClick={() => void requestCode()}
+                >
+                  {countdown > 0 ? `Resend in ${countdown}s` : "Resend code"}
+                </button>
               </div>
-            ) : null}
-            {error ? <LoginError message={error} /> : null}
-            <button
-              className="button button-primary large"
-              disabled={loading || code.length < 4}
-            >
-              {loading ? <LoaderCircle className="spin" /> : <ArrowRight />}
-              Verify and open Hisaab
-            </button>
-            <div className="login-secondary-actions">
+            </form>
+          )
+          : (
+            <form onSubmit={requestCode} className="login-form">
+              <label>
+                <span>Mobile number</span>
+                <input
+                  autoFocus
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+91 98765 43210"
+                  maxLength={20}
+                  required
+                />
+              </label>
+              {error ? <LoginError message={error} /> : null}
               <button
-                type="button"
-                className="quiet-link"
-                onClick={() => {
-                  setChallenge(null);
-                  setCode("");
-                  setError("");
-                }}
+                className="button button-primary large"
+                disabled={loading || phone.trim().length < 8}
               >
-                <Pencil /> Change number
+                {loading ? <LoaderCircle className="spin" /> : <ArrowRight />}
+                Send verification code
               </button>
-              <button
-                type="button"
-                className="quiet-link"
-                disabled={countdown > 0 || loading}
-                onClick={() => void requestCode()}
-              >
-                {countdown > 0 ? `Resend in ${countdown}s` : "Resend code"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <form onSubmit={requestCode} className="login-form">
-            <label>
-              <span>Mobile number</span>
-              <input
-                autoFocus
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="+91 98765 43210"
-                maxLength={20}
-                required
-              />
-            </label>
-            {error ? <LoginError message={error} /> : null}
-            <button
-              className="button button-primary large"
-              disabled={loading || phone.trim().length < 8}
-            >
-              {loading ? <LoaderCircle className="spin" /> : <ArrowRight />}
-              Send verification code
-            </button>
-          </form>
-        )}
+            </form>
+          )}
 
         <small className="login-privacy">
           By continuing, you confirm that you control this phone number. SMS

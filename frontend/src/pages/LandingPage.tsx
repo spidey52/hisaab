@@ -5,7 +5,7 @@ import {
   ShieldCheck,
   Smartphone,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { Brand } from "@/components/Brand";
 import { LandingAuthNav } from "@/components/LandingAuthNav";
 import { LandingHeroCta } from "@/components/LandingHeroCta";
@@ -69,7 +69,9 @@ export function LandingPage() {
         <div>
           <Smartphone aria-hidden="true" />
           <strong>Phone OTP sign-in</strong>
-          <span>No password—verify your mobile number with a one-time code.</span>
+          <span>
+            No password—verify your mobile number with a one-time code.
+          </span>
         </div>
         <div>
           <Cloud aria-hidden="true" />

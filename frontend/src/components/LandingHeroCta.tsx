@@ -1,6 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "@tanstack/react-router";
 import { isAuthenticatedClient } from "@/lib/api-client";
 
 export function LandingHeroCta() {
