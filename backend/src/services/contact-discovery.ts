@@ -1,10 +1,15 @@
 import { normalizeOptionalPhone } from "../utils/phone-normalization";
+import { ApiError } from "../utils/security";
 
 export const MAX_DISCOVERY_PHONES = 500;
 export const MAX_DISCOVERY_REQUESTS_PER_HOUR = 10;
 export const MAX_DISCOVERY_PHONES_PER_HOUR = 2_500;
 
-export class ContactDiscoveryValidationError extends Error {}
+export class ContactDiscoveryValidationError extends ApiError {
+  constructor(message: string) {
+    super(400, message);
+  }
+}
 
 export function normalizeDiscoveryPhones(value: unknown) {
   if (!Array.isArray(value)) {

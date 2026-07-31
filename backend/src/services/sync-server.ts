@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import {
-  operationReceipts,
-  syncChanges,
-  type DbExecutor,
-} from "../db";
+import { type DbExecutor, operationReceipts, syncChanges } from "../db";
+import { throwApiError } from "../utils/security";
 
 export type OperationReceipt = {
   operationType: string;
@@ -68,10 +65,9 @@ export async function readOperationReceipt(
     .limit(1);
   const row = rows[0];
   if (!row) return null;
-  const responseBody =
-    typeof row.responseBody === "string"
-      ? (JSON.parse(row.responseBody) as Record<string, unknown>)
-      : (row.responseBody as Record<string, unknown>);
+  const responseBody = typeof row.responseBody === "string"
+    ? (JSON.parse(row.responseBody) as Record<string, unknown>)
+    : (row.responseBody as Record<string, unknown>);
   return {
     operationType: row.operationType,
     requestHash: row.requestHash,
@@ -89,7 +85,7 @@ export function replayReceipt(
     receipt.operationType !== operationType ||
     receipt.requestHash !== requestHash
   ) {
-    throw idempotencyConflict();
+    idempotencyConflict();
   }
   return {
     ...receipt.responseBody,
@@ -173,18 +169,11 @@ export async function appendSyncChanges(
 }
 
 export function idempotencyConflict() {
-  return new Response(
-    JSON.stringify({
-      error:
-        "This operation identifier was already used for different details.",
-      code: "IDEMPOTENCY_CONFLICT",
-    }),
+  throwApiError(
+    409,
+    "This operation identifier was already used for different details.",
     {
-      status: 409,
-      headers: {
-        "cache-control": "no-store",
-        "content-type": "application/json",
-      },
+      code: "IDEMPOTENCY_CONFLICT",
     },
   );
 }
@@ -197,9 +186,11 @@ export function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableJson).join(",")}]`;
   }
-  return `{${Object.entries(value as Record<string, unknown>)
-    .filter(([, item]) => item !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-    .join(",")}}`;
+  return `{${
+    Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")
+  }}`;
 }

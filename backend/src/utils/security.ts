@@ -25,31 +25,28 @@ export function authenticationSecret() {
   throw new Error("SESSION_SECRET must contain at least 32 characters.");
 }
 
-export class HttpError extends Error {
+export type ApiErrorOptions = {
+  code?: string;
+  context?: Record<string, unknown>;
+  headers?: Record<string, string>;
+};
+
+export class ApiError extends Error {
   constructor(
-    readonly publicMessage: string,
     readonly status: number,
-    readonly retryAfterSeconds?: number,
+    readonly publicMessage: string,
+    readonly options: ApiErrorOptions = {},
   ) {
     super(publicMessage);
+    this.name = "ApiError";
   }
 }
 
-export function apiError(
-  message: string,
+/** Throws a public API error that the root Hono error handler serializes. */
+export function throwApiError(
   status: number,
-  code?: string,
-  extra?: Record<string, unknown>,
-) {
-  return new Response(
-    JSON.stringify({
-      error: message,
-      ...(code ? { code } : {}),
-      ...extra,
-    }),
-    {
-      status,
-      headers: { "content-type": "application/json" },
-    },
-  );
+  message: string,
+  options?: ApiErrorOptions,
+): never {
+  throw new ApiError(status, message, options);
 }

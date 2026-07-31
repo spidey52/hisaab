@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
+const MAX_SAFE_CURSOR = BigInt(Number.MAX_SAFE_INTEGER);
 
 export const syncPullQuerySchema = z.object({
   cursor: z
@@ -13,7 +14,7 @@ export const syncPullQuerySchema = z.object({
     .superRefine((value, ctx) => {
       try {
         const parsed = BigInt(value);
-        if (parsed < 0n || parsed > 9_223_372_036_854_775_807n) {
+        if (parsed < 0n || parsed > MAX_SAFE_CURSOR) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "This sync cursor is invalid.",

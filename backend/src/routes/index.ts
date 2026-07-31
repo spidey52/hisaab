@@ -16,7 +16,6 @@ import {
 } from "../controllers/parties";
 import { updateSettings } from "../controllers/settings";
 import { pull } from "../controllers/sync";
-import { onError } from "../middlewares/error";
 import { json, params, query } from "../middlewares/zod";
 import { deleteAccountSchema } from "../schema/account";
 import { requestOtpSchema, verifyOtpSchema } from "../schema/auth";
@@ -37,7 +36,6 @@ import { syncPullQuerySchema } from "../schema/sync";
 import type { AppEnv } from "../types/hono";
 
 export const apiRoutes = new Hono<AppEnv>();
-apiRoutes.onError(onError);
 
 // Health
 apiRoutes.get("/health", check);

@@ -13,12 +13,13 @@ import {
   db,
   memberships,
   otpChallenges,
-  userSessions,
   users,
+  userSessions,
   withTransaction,
 } from "../db";
 import { addDuration, nowDate, subtractDuration } from "../utils/date-utils";
 import {
+  ApiError,
   authenticationSecret,
   clientIpAddress,
   privateHash,
@@ -52,13 +53,17 @@ type RateLimitSnapshot = {
   retryAfterSeconds: number;
 };
 
-export class PhoneAuthError extends Error {
+export class PhoneAuthError extends ApiError {
   constructor(
-    readonly publicMessage: string,
-    readonly status = 400,
-    readonly retryAfterSeconds?: number,
+    message: string,
+    status = 400,
+    retryAfterSeconds?: number,
   ) {
-    super(publicMessage);
+    super(status, message, {
+      headers: retryAfterSeconds != null
+        ? { "retry-after": String(retryAfterSeconds) }
+        : undefined,
+    });
   }
 }
 
@@ -110,17 +115,24 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
 
       const rate = await client
         .select({
-          phone_count: sql<number>`count(*) filter (where ${otpChallenges.phoneE164} = ${phoneE164})::int`.mapWith(
-            Number,
-          ),
-          ip_count: sql<number>`count(*) filter (where ${otpChallenges.requestedIpHash} = ${ipHash})::int`.mapWith(
-            Number,
-          ),
+          phone_count: sql<
+            number
+          >`count(*) filter (where ${otpChallenges.phoneE164} = ${phoneE164})::int`
+            .mapWith(
+              Number,
+            ),
+          ip_count: sql<
+            number
+          >`count(*) filter (where ${otpChallenges.requestedIpHash} = ${ipHash})::int`
+            .mapWith(
+              Number,
+            ),
           seconds_since_latest: sql<
             number | null
-          >`extract(epoch from (current_timestamp - max(${otpChallenges.createdAt}) filter (where ${otpChallenges.phoneE164} = ${phoneE164})))::int`.mapWith(
-            Number,
-          ),
+          >`extract(epoch from (current_timestamp - max(${otpChallenges.createdAt}) filter (where ${otpChallenges.phoneE164} = ${phoneE164})))::int`
+            .mapWith(
+              Number,
+            ),
         })
         .from(otpChallenges)
         .where(
@@ -130,10 +142,9 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
           ),
         );
       const limits = rate[0];
-      const cooldown =
-        limits?.seconds_since_latest == null
-          ? 0
-          : RESEND_COOLDOWN_SECONDS - limits.seconds_since_latest;
+      const cooldown = limits?.seconds_since_latest == null
+        ? 0
+        : RESEND_COOLDOWN_SECONDS - limits.seconds_since_latest;
       if (
         (limits?.phone_count ?? 0) >= PHONE_REQUESTS_PER_HOUR ||
         (limits?.ip_count ?? 0) >= IP_REQUESTS_PER_HOUR ||
@@ -172,7 +183,9 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
 
   if (provider === "console") {
     console.info(
-      `[Hisaab local OTP] ${maskPhoneNumber(phoneE164)} code ${developmentCode}`,
+      `[Hisaab local OTP] ${
+        maskPhoneNumber(phoneE164)
+      } code ${developmentCode}`,
     );
   } else {
     try {
@@ -213,8 +226,9 @@ export async function verifyPhoneOtp(
   codeInput: unknown,
   request: Request,
 ) {
-  const challengeId =
-    typeof challengeIdInput === "string" ? challengeIdInput.trim() : "";
+  const challengeId = typeof challengeIdInput === "string"
+    ? challengeIdInput.trim()
+    : "";
   const phoneE164 = normalizePhoneNumber(phoneInput);
   const code = typeof codeInput === "string" ? codeInput.trim() : "";
   if (!challengeId || !/^\d{4,10}$/.test(code)) {
@@ -250,10 +264,9 @@ export async function verifyPhoneOtp(
     );
   }
 
-  const approved =
-    challenge.provider === "console"
-      ? verifyLocalCode(challengeId, phoneE164, code, challenge.code_hash)
-      : await checkTwilioVerification(phoneE164, code);
+  const approved = challenge.provider === "console"
+    ? verifyLocalCode(challengeId, phoneE164, code, challenge.code_hash)
+    : await checkTwilioVerification(phoneE164, code);
   const ipHash = privateHash(clientIpAddress(request));
   const phoneHash = privateHash(phoneE164);
 
@@ -268,8 +281,8 @@ export async function verifyPhoneOtp(
     throw new PhoneAuthError(
       attemptsLeft > 0
         ? `That code is not correct. ${attemptsLeft} ${
-            attemptsLeft === 1 ? "try" : "tries"
-          } remaining.`
+          attemptsLeft === 1 ? "try" : "tries"
+        } remaining.`
         : "Too many incorrect attempts. Request a new code.",
       400,
     );
@@ -479,15 +492,19 @@ async function startTwilioVerification(phoneE164: string) {
   const credentials = twilioCredentials();
   const body = new URLSearchParams({ To: phoneE164, Channel: "sms" });
   const response = await fetch(
-    `https://verify.twilio.com/v2/Services/${encodeURIComponent(
-      credentials.serviceSid,
-    )}/Verifications`,
+    `https://verify.twilio.com/v2/Services/${
+      encodeURIComponent(
+        credentials.serviceSid,
+      )
+    }/Verifications`,
     {
       method: "POST",
       headers: {
-        authorization: `Basic ${Buffer.from(
-          `${credentials.accountSid}:${credentials.authToken}`,
-        ).toString("base64")}`,
+        authorization: `Basic ${
+          Buffer.from(
+            `${credentials.accountSid}:${credentials.authToken}`,
+          ).toString("base64")
+        }`,
         "content-type": "application/x-www-form-urlencoded",
       },
       body,
@@ -516,15 +533,19 @@ async function startTwilioVerification(phoneE164: string) {
 async function checkTwilioVerification(phoneE164: string, code: string) {
   const credentials = twilioCredentials();
   const response = await fetch(
-    `https://verify.twilio.com/v2/Services/${encodeURIComponent(
-      credentials.serviceSid,
-    )}/VerificationCheck`,
+    `https://verify.twilio.com/v2/Services/${
+      encodeURIComponent(
+        credentials.serviceSid,
+      )
+    }/VerificationCheck`,
     {
       method: "POST",
       headers: {
-        authorization: `Basic ${Buffer.from(
-          `${credentials.accountSid}:${credentials.authToken}`,
-        ).toString("base64")}`,
+        authorization: `Basic ${
+          Buffer.from(
+            `${credentials.accountSid}:${credentials.authToken}`,
+          ).toString("base64")
+        }`,
         "content-type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ To: phoneE164, Code: code }),

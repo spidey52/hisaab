@@ -42,9 +42,12 @@ export async function getBootstrapData(
         created_at: parties.createdAt,
         updated_at: parties.updatedAt,
         version: parties.version,
-        balance_paise: sql<number>`coalesce(sum(case when ${entries.status} = 'posted' then ${entries.balanceEffectPaise} else 0 end), 0)`.mapWith(
-          Number,
-        ),
+        balance_paise: sql<
+          number
+        >`coalesce(sum(case when ${entries.status} = 'posted' then ${entries.balanceEffectPaise} else 0 end), 0)`
+          .mapWith(
+            Number,
+          ),
         transaction_count: sql<number>`count(${entries.id})`.mapWith(Number),
       })
       .from(parties)
@@ -75,22 +78,26 @@ export async function getBootstrapData(
         entry_date: entries.entryDate,
         payment_account: entries.paymentAccount,
         status: entries.status,
-        created_by_name: sql<string>`coalesce(${users.fullName}, 'User ' || right(${users.phoneE164}, 4))`,
+        created_by_name: sql<
+          string
+        >`coalesce(${users.fullName}, 'User ' || right(${users.phoneE164}, 4))`,
         created_at: entries.createdAt,
         edited_at: entries.editedAt,
         cancelled_at: entries.cancelledAt,
         updated_at: entries.updatedAt,
         version: entries.version,
-        revision_count: sql<number>`(select count(*)::int from ${entryRevisions} r where r.entry_id = ${entries.id})`.mapWith(
-          Number,
-        ),
+        revision_count: sql<
+          number
+        >`(select count(*)::int from ${entryRevisions} r where r.entry_id = ${entries.id})`
+          .mapWith(
+            Number,
+          ),
       })
       .from(entries)
       .innerJoin(parties, eq(parties.id, entries.partyId))
       .innerJoin(users, eq(users.id, entries.createdBy))
       .where(eq(entries.companyId, context.companyId))
-      .orderBy(desc(entries.entryDate), desc(entries.sequence))
-      .limit(1000);
+      .orderBy(desc(entries.entryDate), desc(entries.sequence));
 
     const groupResult = await client
       .select({
@@ -121,7 +128,9 @@ export async function getBootstrapData(
       .select({
         id: users.id,
         phone_e164: users.phoneE164,
-        full_name: sql<string>`coalesce(${users.fullName}, 'User ' || right(${users.phoneE164}, 4))`,
+        full_name: sql<
+          string
+        >`coalesce(${users.fullName}, 'User ' || right(${users.phoneE164}, 4))`,
         language: users.language,
         accessibility_mode: users.accessibilityMode,
         contact_discoverable: users.contactDiscoverable,
@@ -164,9 +173,15 @@ export async function getBootstrapData(
         version: Number(row.version ?? 1),
         updatedAt: String(row.updated_at),
       })),
-      groups: groupResult.map((row) => rowToGroup(row as Record<string, unknown>)),
-      parties: partyResult.map((row) => rowToParty(row as Record<string, unknown>)),
-      entries: entryResult.map((row) => rowToEntry(row as Record<string, unknown>)),
+      groups: groupResult.map((row) =>
+        rowToGroup(row as Record<string, unknown>)
+      ),
+      parties: partyResult.map((row) =>
+        rowToParty(row as Record<string, unknown>)
+      ),
+      entries: entryResult.map((row) =>
+        rowToEntry(row as Record<string, unknown>)
+      ),
       serverTime: nowIso(),
       syncCursor,
     };
@@ -203,12 +218,11 @@ export function rowToParty(row: Record<string, unknown>): Party {
 }
 
 export function rowToEntry(row: Record<string, unknown>): Entry {
-  const action =
-    row.action === "received"
-      ? "received"
-      : row.action === "opening_balance"
-        ? "opening_balance"
-        : "gave";
+  const action = row.action === "received"
+    ? "received"
+    : row.action === "opening_balance"
+    ? "opening_balance"
+    : "gave";
   return {
     id: String(row.id),
     partyId: String(row.party_id),
@@ -219,9 +233,7 @@ export function rowToEntry(row: Record<string, unknown>): Entry {
     balanceEffectPaise: Number(row.balance_effect_paise),
     narration: String(row.narration ?? ""),
     entryDate: toDateOnly(row.entry_date),
-    paymentAccount: row.payment_account
-      ? String(row.payment_account)
-      : null,
+    paymentAccount: row.payment_account ? String(row.payment_account) : null,
     status: row.status === "cancelled" ? "cancelled" : "posted",
     createdByName: String(row.created_by_name),
     createdAt: String(row.created_at),
