@@ -49,7 +49,7 @@ class AuthController extends GetxController {
 
   Future<void> restoreSession() async {
     errorMessage.value = null;
-    final cookie = await _storage.readSessionCookie();
+    final cookie = await _storage.readSessionToken();
     if (cookie == null) {
       await _sync.stop();
       await _storage.quarantineActiveScope();
@@ -157,7 +157,7 @@ class AuthController extends GetxController {
     _handlingExpiredSession = true;
     try {
       await _sync.stop();
-      await _storage.clearSessionCookie();
+      await _storage.clearSessionToken();
       await _storage.quarantineActiveScope();
       _ledger.clear();
       challenge.value = null;

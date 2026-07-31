@@ -2,14 +2,24 @@
 .DS_Store
 Thumbs.db
 .idea/
+.vscode/
 *.swp
 *~
 
-# Local env at repo root (webapp/.env is covered by webapp/.gitignore)
+# Env files (keep examples)
 .env
 .env.*
 !.env.example
 !.env.*.example
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Backend local data / logs
+backend/data/
+backend/*.log
+**/dist/
 
 # FVM (keep config, ignore SDK cache)
 **/.fvm/flutter_sdk
@@ -19,3 +29,5 @@ Thumbs.db
 *.apk
 *.aab
 *.ipa
+*.dump
+*.log

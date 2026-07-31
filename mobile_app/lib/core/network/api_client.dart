@@ -23,15 +23,11 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final cookie = await _storage.readSessionCookie();
-          if (cookie != null && cookie.isNotEmpty) {
-            options.headers['cookie'] = cookie;
+          final token = await _storage.readSessionToken();
+          if (token != null && token.isNotEmpty) {
+            options.headers['authorization'] = 'Bearer $token';
           }
           handler.next(options);
-        },
-        onResponse: (response, handler) async {
-          await _captureSessionCookie(response.headers['set-cookie']);
-          handler.next(response);
         },
       ),
     );
@@ -93,21 +89,6 @@ class ApiClient {
   Future<void> close() async {
     dio.close(force: true);
     await _unauthorizedController.close();
-  }
-
-  Future<void> _captureSessionCookie(List<String>? headers) async {
-    if (headers == null) return;
-    final pattern = RegExp(r'((?:__Host-)?hisaab_session)=([^;]*)');
-    for (final header in headers) {
-      final match = pattern.firstMatch(header);
-      if (match == null) continue;
-      final value = match.group(2) ?? '';
-      if (value.isEmpty) {
-        await _storage.clearSessionCookie();
-      } else {
-        await _storage.writeSessionCookie('${match.group(1)}=$value');
-      }
-    }
   }
 }
 

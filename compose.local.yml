@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    profiles: ["db"]
+    environment:
+      POSTGRES_DB: hisaab
+      POSTGRES_USER: hisaab
+      POSTGRES_PASSWORD: hisaab_local_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hisaab -d hisaab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - ./backend/data/postgres:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      PORT: "3001"
+      SESSION_SECRET: ${SESSION_SECRET:-local-only-hisaab-session-secret-change-for-production}
+      OTP_PROVIDER: ${OTP_PROVIDER:-console}
+      ALLOW_INSECURE_LOCAL_OTP: "true"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      TRUST_PROXY: "false"
+      # Host/shell DATABASE_URL wins; otherwise backend/.env; else compose db.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://hisaab:hisaab_local_password@db:5432/hisaab}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bun -e \"fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 25s
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3001}
+    init: true
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"

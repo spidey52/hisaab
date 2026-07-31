@@ -9,42 +9,31 @@ permissions:
   contents: read
 
 jobs:
-  web:
+  backend:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql://hisaab:hisaab_test_password@127.0.0.1:5432/hisaab_test
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_DB: hisaab_test
-          POSTGRES_USER: hisaab
-          POSTGRES_PASSWORD: hisaab_test_password
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U hisaab -d hisaab_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-    defaults:
-      run:
-        working-directory: webapp
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 11.9.0
-      - uses: actions/setup-node@v4
+          bun-version: 1.3.2
+      - name: Install and typecheck
+        working-directory: backend
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22.19.0
-          cache: pnpm
-          cache-dependency-path: webapp/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm db:migrate
-      - run: pnpm exec tsc --noEmit
-      - run: pnpm lint
-      - run: pnpm test
+          bun-version: 1.3.2
+      - name: Install, typecheck, and build
+        working-directory: frontend
+        run: |
+          bun install --frozen-lockfile
+          bun run build
 
   mobile-android:
     runs-on: ubuntu-latest

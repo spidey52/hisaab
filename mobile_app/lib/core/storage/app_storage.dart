@@ -14,7 +14,7 @@ class AppStorage {
       // ignore: prefer_initializing_formals
       _database = database;
 
-  static const _sessionCookieKey = 'hisaab_session_cookie_v1';
+  static const _sessionTokenKey = 'hisaab_session_token_v1';
   static const _databaseKeyKey = 'hisaab_local_database_key_v1';
   static const _legacyBootstrapCacheKey = 'hisaab_bootstrap_cache_v1';
 
@@ -60,14 +60,14 @@ class AppStorage {
     return this;
   }
 
-  Future<String?> readSessionCookie() =>
-      _secureStorage.read(key: _sessionCookieKey);
+  Future<String?> readSessionToken() =>
+      _secureStorage.read(key: _sessionTokenKey);
 
-  Future<void> writeSessionCookie(String value) =>
-      _secureStorage.write(key: _sessionCookieKey, value: value);
+  Future<void> writeSessionToken(String value) =>
+      _secureStorage.write(key: _sessionTokenKey, value: value);
 
-  Future<void> clearSessionCookie() =>
-      _secureStorage.delete(key: _sessionCookieKey);
+  Future<void> clearSessionToken() =>
+      _secureStorage.delete(key: _sessionTokenKey);
 
   Future<void> cacheBootstrap(Map<String, dynamic> value) async {
     final scope = _scopeFromBootstrap(value);
@@ -404,7 +404,7 @@ class AppStorage {
   }
 
   Future<void> clearAll() async {
-    await clearSessionCookie();
+    await clearSessionToken();
     final scope = _activeScope ?? _quarantinedScope;
     if (scope != null) {
       await database.clearScope(scope.accountId, scope.companyId);

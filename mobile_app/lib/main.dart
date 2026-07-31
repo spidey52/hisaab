@@ -38,7 +38,7 @@ Future<void> main() async {
 
   final apiClient = ApiClient(storage);
   Get.put<ApiClient>(apiClient, permanent: true);
-  Get.put<AuthRepository>(AuthRepository(apiClient), permanent: true);
+  Get.put<AuthRepository>(AuthRepository(apiClient, storage), permanent: true);
   Get.put<LedgerRepository>(
     LedgerRepository(apiClient, storage),
     permanent: true,
