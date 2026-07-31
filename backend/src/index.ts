@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { logger } from "hono/logger";
 import { env } from "./config/env";
 import { onError } from "./middlewares/error";
 
 const { apiRoutes } = await import("./routes/index");
 
 const app = new Hono();
+app.use(logger())
 app.onError(onError);
 
 app.use(
