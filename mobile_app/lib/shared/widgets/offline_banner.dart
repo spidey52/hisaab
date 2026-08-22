@@ -27,6 +27,7 @@ class OfflineBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final displayMessage = message.tr;
     final pendingText = pendingCount > 0
         ? (pendingCount == 1
@@ -61,15 +62,20 @@ class OfflineBanner extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF3E7),
+          color: colors.amberSoft,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFF0CFAC)),
+          border: Border.all(
+            color: Color.alphaBlend(
+              colors.amber.withValues(alpha: 0.28),
+              colors.amberSoft,
+            ),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.only(top: 2),
               child: Icon(
                 needsAttentionCount > 0
                     ? Icons.error_outline_rounded
@@ -79,7 +85,7 @@ class OfflineBanner extends StatelessWidget {
                     ? Icons.cloud_off_outlined
                     : Icons.cloud_upload_outlined,
                 size: 22,
-                color: AppColors.amber,
+                color: colors.amber,
               ),
             ),
             const SizedBox(width: 10),
@@ -90,7 +96,7 @@ class OfflineBanner extends StatelessWidget {
                   Text(
                     title,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: AppColors.ink,
+                      color: colors.ink,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -98,7 +104,7 @@ class OfflineBanner extends StatelessWidget {
                   Text(
                     displayMessage,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.muted,
+                      color: colors.muted,
                       height: 1.4,
                     ),
                   ),
@@ -107,7 +113,7 @@ class OfflineBanner extends StatelessWidget {
                     Text(
                       pendingText,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.amber,
+                        color: colors.amber,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -117,7 +123,7 @@ class OfflineBanner extends StatelessWidget {
                     Text(
                       attentionText,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.red,
+                        color: colors.red,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -128,7 +134,7 @@ class OfflineBanner extends StatelessWidget {
                       syncedText,
                       style: Theme.of(
                         context,
-                      ).textTheme.labelSmall?.copyWith(color: AppColors.muted),
+                      ).textTheme.labelSmall?.copyWith(color: colors.muted),
                     ),
                   ],
                 ],

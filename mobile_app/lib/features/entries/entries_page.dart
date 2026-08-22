@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/app.dart';
-import '../../core/network/api_failure.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/utils/formatters.dart';
 import '../../data/models/models.dart';
 import '../../shared/widgets/direction_action_button.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/entry_detail_sheet.dart';
 import '../../shared/widgets/entry_tile.dart';
 import '../ledger/ledger_controller.dart';
 
@@ -30,9 +28,7 @@ class EntriesPage extends GetView<LedgerController> {
               children: [
                 Text(
                   'Filter entries',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -100,109 +96,28 @@ class EntriesPage extends GetView<LedgerController> {
     controller.entryPeriod.value = result.$2;
   }
 
-  Future<void> _openEntry(BuildContext context, LedgerEntry entry) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              EntryTile(
-                entry: entry,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              const Divider(height: 24),
-              _EntryDetailRow('Date', formatShortDate(entry.entryDate)),
-              _EntryDetailRow('Entry number', '${entry.sequence}'),
-              if (entry.narration.trim().isNotEmpty)
-                _EntryDetailRow('Note', entry.narration.trim()),
-              if (entry.createdByName.isNotEmpty)
-                _EntryDetailRow('Added by', entry.createdByName),
-              if (entry.status == EntryStatus.posted &&
-                  !entry.isOpeningBalance) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context, 'edit'),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit entry'),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context, 'cancel'),
-                  icon: const Icon(Icons.block_outlined),
-                  label: const Text('Cancel this entry'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!context.mounted) return;
-    if (action == 'edit') {
-      await Get.toNamed(AppRoutes.addEntry, arguments: {'entryId': entry.id});
-      return;
-    }
-    if (action != 'cancel') return;
-    if (!context.mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this entry?'),
-        content: const Text(
-          'It will no longer affect the balance, but will remain visible in '
-          'the history.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep entry'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel entry'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await controller.cancelEntry(entry.id);
-    } on ApiFailure catch (error) {
-      Get.snackbar(
-        'Could not cancel entry',
-        error.message,
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-
   void _add(EntryAction action) {
     if (controller.parties.where((party) => !party.isArchived).isEmpty) {
-      Get.toNamed(AppRoutes.addParty);
       Get.snackbar(
-        'Add a party first',
-        'Choose who this entry is for.',
+        'First, add a party',
+        'An entry needs a customer or supplier. Add one now.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      Get.toNamed(AppRoutes.addParty);
       return;
     }
     Get.toNamed(AppRoutes.addEntry, arguments: {'action': action});
   }
 
+  bool get _hasActiveFilter =>
+      controller.entryDirection.value != 'all' ||
+      controller.entryPeriod.value != 'all' ||
+      controller.entrySearch.value.trim().isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Entries',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Entries')),
       body: RefreshIndicator(
         onRefresh: () => controller.reload(showLoader: false),
         child: Column(
@@ -239,7 +154,7 @@ class EntriesPage extends GetView<LedgerController> {
                               controller.entrySearch.value = value,
                           textInputAction: TextInputAction.search,
                           decoration: const InputDecoration(
-                            hintText: 'Search entries',
+                            hintText: 'Search party, note or number',
                             prefixIcon: Icon(Icons.search_rounded),
                             isDense: true,
                           ),
@@ -271,15 +186,34 @@ class EntriesPage extends GetView<LedgerController> {
               child: Obx(() {
                 final entries = controller.filteredEntries;
                 if (entries.isEmpty) {
+                  final filtered = _hasActiveFilter;
                   return ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [
-                      EmptyState(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'No matching entries',
-                        message:
-                            'Try clearing the filter or record a new entry.',
-                      ),
+                    children: [
+                      if (filtered)
+                        EmptyState(
+                          icon: Icons.search_off_rounded,
+                          title: 'No matching entries',
+                          message:
+                              'Nothing matches this search or filter. Clear '
+                              'it to see every entry.',
+                          actionLabel: 'Clear filters',
+                          onAction: () {
+                            controller.entryDirection.value = 'all';
+                            controller.entryPeriod.value = 'all';
+                            controller.entrySearch.value = '';
+                          },
+                        )
+                      else
+                        EmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'No entries yet',
+                          message:
+                              'Every entry you record will appear here with '
+                              'its entry number.',
+                          actionLabel: 'Record first entry',
+                          onAction: () => _add(EntryAction.received),
+                        ),
                     ],
                   );
                 }
@@ -290,42 +224,13 @@ class EntriesPage extends GetView<LedgerController> {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) => EntryTile(
                     entry: entries[index],
-                    onTap: () => _openEntry(context, entries[index]),
+                    onTap: () => showEntryDetailSheet(context, entries[index]),
                   ),
                 );
               }),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _EntryDetailRow extends StatelessWidget {
-  const _EntryDetailRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(label, style: const TextStyle(color: AppColors.muted)),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
       ),
     );
   }

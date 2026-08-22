@@ -6,6 +6,7 @@ export 'brand_mark.dart';
 export 'direction_action_button.dart';
 export 'empty_state.dart';
 export 'entry_tile.dart';
-export 'headers.dart';
 export 'offline_banner.dart';
 export 'party_tile.dart';
+export 'entry_detail_sheet.dart';
+export 'sync_strip.dart';

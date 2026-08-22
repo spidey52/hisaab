@@ -28,6 +28,7 @@ class CalculatorKeypad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final evaluation = evaluateCalculatorExpression(expression);
     return Semantics(
       container: true,
@@ -35,8 +36,8 @@ class CalculatorKeypad extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: AppColors.line),
+          color: colors.surfaceRaised,
+          border: Border.all(color: colors.line),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -44,8 +45,8 @@ class CalculatorKeypad extends StatelessWidget {
           children: [
             Text(
               'Calculation'.tr,
-              style: const TextStyle(
-                color: AppColors.muted,
+              style: TextStyle(
+                color: colors.muted,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -61,9 +62,9 @@ class CalculatorKeypad extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ),
             const SizedBox(height: 5),
@@ -81,11 +82,10 @@ class CalculatorKeypad extends StatelessWidget {
                     : evaluation.error ?? ' ',
                 textAlign: TextAlign.end,
                 style: TextStyle(
-                  color: evaluation.isValid
-                      ? AppColors.greenDark
-                      : AppColors.red,
+                  color: evaluation.isValid ? colors.greenDark : colors.red,
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -160,6 +160,7 @@ class _CalculatorKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final operation = const {'+', '−', '×', '÷', '%', '='}.contains(label);
     final spokenLabel = (switch (label) {
       '⌫' => 'Backspace',
@@ -177,18 +178,28 @@ class _CalculatorKey extends StatelessWidget {
       excludeSemantics: true,
       label: spokenLabel,
       child: Material(
-        color: operation ? AppColors.greenSoft : const Color(0xFFF5F7F6),
-        borderRadius: BorderRadius.circular(12),
+        color: operation ? colors.greenSoft : colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(
+            color: operation
+                ? Color.alphaBlend(
+                    colors.greenDark.withValues(alpha: 0.16),
+                    colors.greenSoft,
+                  )
+                : colors.line,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 52),
             child: Center(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: operation ? AppColors.greenDark : AppColors.ink,
+                  color: operation ? colors.greenDark : colors.ink,
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
                 ),

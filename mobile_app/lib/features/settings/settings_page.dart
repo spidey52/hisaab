@@ -14,8 +14,8 @@ import '../../core/utils/formatters.dart';
 import '../../data/repositories/ledger_repository.dart';
 import '../../services/contact_discovery_consent_service.dart';
 import '../../shared/widgets/async_action_button.dart';
-import '../../shared/widgets/brand_mark.dart';
 import '../auth/auth_controller.dart';
+import '../learn/learn_page.dart';
 import '../ledger/ledger_controller.dart';
 
 class MorePage extends StatelessWidget {
@@ -25,15 +25,12 @@ class MorePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final ledger = Get.find<LedgerController>();
     final auth = Get.find<AuthController>();
+    final colors = context.colors;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'More'.tr,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: Text('More'.tr)),
       body: Obx(() {
         final data = ledger.data.value;
+        final userName = data?.user.fullName ?? 'Hisaab user';
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
           children: [
@@ -42,23 +39,40 @@ class MorePage extends StatelessWidget {
                 padding: const EdgeInsets.all(18),
                 child: Row(
                   children: [
-                    const BrandMark(size: 48),
+                    Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.greenSoft,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Text(
+                        initials(userName),
+                        style: displayStyle(
+                          fontSize: 17,
+                          color: colors.greenDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            data?.user.fullName ?? 'Hisaab user',
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                            ),
+                            userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 3),
                           Text(
                             data?.user.phoneE164 ?? '',
-                            style: const TextStyle(color: AppColors.muted),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colors.muted),
                           ),
                         ],
                       ),
@@ -80,6 +94,17 @@ class MorePage extends StatelessWidget {
                     subtitle: const Text('Business name and accessibility'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => Get.toNamed(AppRoutes.settings),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.school_outlined),
+                    title: Text(
+                      'Learn'.tr,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text('Short lessons on using your khata'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Get.to<void>(() => const LearnPage()),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -122,6 +147,24 @@ class MorePage extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 22),
+            Text('About'.tr, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 10),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.verified_outlined),
+                title: Text(
+                  'App version'.tr,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                trailing: Text(
+                  '1.0.0 (redesign preview)',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.muted),
+                ),
+              ),
+            ),
             const SizedBox(height: 14),
             Card(
               child: ExpansionTile(
@@ -133,10 +176,10 @@ class MorePage extends StatelessWidget {
                 childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Sign-in mode',
                     style: TextStyle(
-                      color: AppColors.muted,
+                      color: colors.muted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -151,10 +194,10 @@ class MorePage extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     'Server',
                     style: TextStyle(
-                      color: AppColors.muted,
+                      color: colors.muted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -164,13 +207,13 @@ class MorePage extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 10),
-                  const Text(
+                  Text(
                     'Your phone must be able to reach this Hisaab '
                     'server. If it is unavailable, saved changes remain on '
                     'this device and sync later. To use a different server, '
                     'sign out and choose Cloud or Self-hosted on the login '
                     'screen.',
-                    style: TextStyle(color: AppColors.muted, height: 1.4),
+                    style: TextStyle(color: colors.muted, height: 1.4),
                   ),
                 ],
               ),
@@ -216,7 +259,9 @@ class MorePage extends StatelessWidget {
           ),
           FilledButton(
             style: unsynced > 0
-                ? FilledButton.styleFrom(backgroundColor: AppColors.red)
+                ? FilledButton.styleFrom(
+                    backgroundColor: context.colors.red,
+                  )
                 : null,
             onPressed: () => Navigator.pop(context, true),
             child: Text(
@@ -475,7 +520,9 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Text('Keep account'.tr),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+              style: FilledButton.styleFrom(
+                backgroundColor: context.colors.red,
+              ),
               onPressed: matches
                   ? () => Navigator.pop(dialogContext, true)
                   : null,
@@ -510,13 +557,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final sectionStyle = Theme.of(context).textTheme.titleLarge;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Settings'.tr,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: Text('Settings'.tr)),
       body: SafeArea(
         top: false,
         child: Form(
@@ -524,12 +568,7 @@ class _SettingsPageState extends State<SettingsPage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
             children: [
-              Text(
-                'Business'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
+              Text('Business'.tr, style: sectionStyle),
               const SizedBox(height: 10),
               TextFormField(
                 controller: _company,
@@ -545,12 +584,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     : null,
               ),
               const SizedBox(height: 22),
-              Text(
-                'Reading comfort'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
+              Text('Reading comfort'.tr, style: sectionStyle),
               const SizedBox(height: 10),
               Card(
                 child: SwitchListTile(
@@ -583,12 +617,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: _ledger.mutating.value ? null : _setLanguage,
               ),
               const SizedBox(height: 22),
-              Text(
-                'Privacy'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
+              Text('Privacy'.tr, style: sectionStyle),
               const SizedBox(height: 10),
               Card(
                 child: Column(
@@ -634,12 +663,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Data and recovery'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
+              Text('Data and recovery'.tr, style: sectionStyle),
               const SizedBox(height: 10),
               Card(
                 child: Column(
@@ -681,14 +705,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const Divider(height: 1),
                     ListTile(
-                      leading: const Icon(
+                      leading: Icon(
                         Icons.delete_forever_outlined,
-                        color: AppColors.red,
+                        color: colors.red,
                       ),
                       title: Text(
                         'Delete account and ledger'.tr,
-                        style: const TextStyle(
-                          color: AppColors.red,
+                        style: TextStyle(
+                          color: colors.red,
                           fontWeight: FontWeight.w700,
                         ),
                       ),

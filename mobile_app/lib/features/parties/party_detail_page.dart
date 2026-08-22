@@ -187,9 +187,7 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
             children: [
               Text(
                 'Statement period'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
               for (final item in [
@@ -202,9 +200,9 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                   title: Text(item.$2),
                   trailing: _period == item.$1
-                      ? const Icon(
+                      ? Icon(
                           Icons.check_circle_rounded,
-                          color: AppColors.green,
+                          color: context.colors.green,
                         )
                       : null,
                   onTap: () => Navigator.pop(context, item.$1),
@@ -256,9 +254,7 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
             children: [
               Text(
                 'Share statement'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 6),
               SwitchListTile(
@@ -518,7 +514,10 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
             child: const Text('Keep entry'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Cancel entry'),
           ),
@@ -626,7 +625,10 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
             child: Text('Cancel'.tr),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: dialogContext.colors.red,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text('Merge permanently'.tr),
           ),
@@ -683,10 +685,7 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       final snapshot = _currentSnapshot(party);
       return Scaffold(
         appBar: AppBar(
-          title: Text(
-            party.name,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
+          title: Text(party.name),
           actions: [
             if (validPhone)
               IconButton(
@@ -785,38 +784,25 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                 sliver: SliverList.list(
                   children: [
+                    _PartyHeader(party: party, validPhone: validPhone),
+                    const SizedBox(height: 14),
                     BalanceSentence(
                       balancePaise: party.balancePaise,
                       partyName: party.name,
                     ),
-                    if (party.phone.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Icon(
-                            validPhone
-                                ? Icons.phone_outlined
-                                : Icons.phone_disabled_outlined,
-                            size: 18,
-                            color: AppColors.muted,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              formatPhoneForDisplay(party.phone),
-                              style: const TextStyle(color: AppColors.muted),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                     if (!validPhone) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFF8E7),
+                          color: context.colors.amberSoft,
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Color.alphaBlend(
+                              context.colors.amber.withValues(alpha: 0.16),
+                              context.colors.amberSoft,
+                            ),
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -842,18 +828,19 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF0F3F1),
+                          color: context.colors.settledSoft,
                           borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.colors.line),
                         ),
-                        child: const Text(
+                        child: Text(
                           'Archived party — restore it before adding a new entry.',
                           style: TextStyle(
-                            color: AppColors.muted,
+                            color: context.colors.muted,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       )
-                    else
+                    else ...[
                       Row(
                         children: [
                           Expanded(
@@ -885,14 +872,31 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
                           ),
                         ],
                       ),
+                      if (party.balancePaise != 0) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => Get.toNamed(
+                            AppRoutes.addEntry,
+                            arguments: {
+                              'action': party.balancePaise > 0
+                                  ? EntryAction.received
+                                  : EntryAction.gave,
+                              'partyId': party.id,
+                              'amountPaise': party.balancePaise.abs(),
+                            },
+                          ),
+                          icon: const Icon(Icons.task_alt_rounded),
+                          label: Text('Mark settled'.tr),
+                        ),
+                      ],
+                    ],
                     const SizedBox(height: 24),
                     Row(
                       children: [
                         Expanded(
                           child: Text(
                             'Statement'.tr,
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
+                            style: Theme.of(context).textTheme.titleLarge,
                           ),
                         ),
                         OutlinedButton.icon(
@@ -955,9 +959,9 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
                     itemBuilder: (context, index) {
                       final item = snapshot.entries[index];
                       return DecoratedBox(
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           border: Border(
-                            bottom: BorderSide(color: AppColors.line),
+                            bottom: BorderSide(color: context.colors.line),
                           ),
                         ),
                         child: EntryTile(
@@ -1168,6 +1172,87 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
 
 enum _ShareAction { whatsApp, sms, pdf, system, copy }
 
+/// Header identity block: rounded-square avatar toned by the balance
+/// direction, party name, and the phone number when one is saved.
+class _PartyHeader extends StatelessWidget {
+  const _PartyHeader({required this.party, required this.validPhone});
+
+  final Party party;
+  final bool validPhone;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final tones = balanceTones(context, party.balanceKind);
+    return Semantics(
+      container: true,
+      label:
+          '${party.name}'
+          '${party.phone.isEmpty ? '' : ', ${formatPhoneForDisplay(party.phone)}'}',
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: tones.background,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: tones.border),
+            ),
+            child: Text(
+              initials(party.name),
+              style: displayStyle(
+                fontSize: 18,
+                color: tones.foreground,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  party.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (party.phone.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        validPhone
+                            ? Icons.phone_outlined
+                            : Icons.phone_disabled_outlined,
+                        size: 16,
+                        color: colors.muted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          formatPhoneForDisplay(party.phone),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colors.muted),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MergePartyPicker extends StatefulWidget {
   const _MergePartyPicker({required this.source, required this.candidates});
 
@@ -1208,14 +1293,12 @@ class _MergePartyPickerState extends State<_MergePartyPicker> {
               children: [
                 Text(
                   'Merge ${widget.source.name} into…',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Choose the party record you want to keep.',
-                  style: TextStyle(color: AppColors.muted),
+                  style: TextStyle(color: context.colors.muted),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -1240,11 +1323,21 @@ class _MergePartyPickerState extends State<_MergePartyPicker> {
                     itemBuilder: (context, index) {
                       final party = parties[index];
                       return ListTile(
-                        leading: CircleAvatar(
+                        leading: Container(
+                          width: 42,
+                          height: 42,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: context.colors.greenSoft,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
                           child: Text(
-                            party.name.trim().isEmpty
-                                ? '?'
-                                : party.name.trim()[0].toUpperCase(),
+                            initials(party.name),
+                            style: displayStyle(
+                              fontSize: 15,
+                              color: context.colors.greenDark,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         title: Text(
@@ -1316,7 +1409,9 @@ class _StatementSummary extends StatelessWidget {
       children: [
         Text(
           '${formatShortDate(snapshot.from)} – ${formatShortDate(snapshot.to)}',
-          style: const TextStyle(color: AppColors.muted),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: context.colors.muted),
         ),
         const SizedBox(height: 8),
         if (largeText)
@@ -1342,29 +1437,47 @@ class _BalanceBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final kind = balancePaise > 0
+        ? BalanceKind.receive
+        : balancePaise < 0
+        ? BalanceKind.pay
+        : BalanceKind.settled;
+    final tones = balanceTones(context, kind);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: tones.background,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: tones.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.muted)),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: tones.foreground,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 3),
           Text(
             formatMoney(balancePaise, absolute: true),
-            style: TextStyle(
-              color: balancePaise < 0 ? AppColors.red : AppColors.greenDark,
-              fontWeight: FontWeight.w800,
+            style: displayStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w700,
+              color: tones.foreground,
+              letterSpacing: -0.4,
             ),
           ),
           Text(
             balanceSentenceText(balancePaise),
-            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: colors.muted,
+              fontSize: 12,
+            ),
           ),
         ],
       ),
@@ -1380,21 +1493,28 @@ class _StatementNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E7),
+        color: colors.amberSoft,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Color.alphaBlend(
+            colors.amber.withValues(alpha: 0.16),
+            colors.amberSoft,
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: AppColors.amber),
+          Icon(icon, size: 20, color: colors.amber),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: AppColors.muted, height: 1.35),
+              style: TextStyle(color: colors.muted, height: 1.35),
             ),
           ),
         ],
@@ -1418,7 +1538,10 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 108,
-            child: Text(label, style: const TextStyle(color: AppColors.muted)),
+            child: Text(
+              label,
+              style: TextStyle(color: context.colors.muted),
+            ),
           ),
           Expanded(
             child: Text(

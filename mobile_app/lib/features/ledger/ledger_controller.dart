@@ -37,6 +37,10 @@ class LedgerController extends GetxController {
 
   final partySearch = ''.obs;
   final partyFilter = 'active'.obs;
+
+  /// Party list ordering: 'name' (A to Z), 'balance' (largest first), or
+  /// 'recent' (latest entry activity first).
+  final partySort = 'name'.obs;
   final entrySearch = ''.obs;
   final entryDirection = 'all'.obs;
   final entryPeriod = 'all'.obs;

@@ -1,56 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 
 import '../../app/app.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/models.dart';
 import '../../shared/widgets/balance_widgets.dart';
+import '../../shared/widgets/brand_mark.dart';
 import '../../shared/widgets/direction_action_button.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/entry_detail_sheet.dart';
 import '../../shared/widgets/entry_tile.dart';
-import '../../shared/widgets/offline_banner.dart';
 import '../ledger/ledger_controller.dart';
 import '../shell/navigation_controller.dart';
-import '../sync/sync_review_sheet.dart';
 
 class HomePage extends GetView<LedgerController> {
   const HomePage({super.key});
 
-  Future<void> _retrySync() async {
-    try {
-      await controller.retryPending();
-      if (controller.pendingCount.value == 0 &&
-          controller.needsAttentionCount.value == 0) {
-        Get.snackbar(
-          'Sync complete',
-          'Saved changes are up to date.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
-    } on Object catch (error) {
-      Get.snackbar(
-        'Could not sync',
-        error.toString(),
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-
   void _addEntry(EntryAction action) {
     if (controller.parties.where((party) => !party.isArchived).isEmpty) {
-      Get.toNamed(AppRoutes.addParty);
       Get.snackbar(
-        'Add a party first',
-        'Choose who this entry is for.',
+        'First, add a party',
+        'An entry needs a customer or supplier. Add one now.',
         snackPosition: SnackPosition.BOTTOM,
       );
+      Get.toNamed(AppRoutes.addParty);
       return;
     }
     Get.toNamed(AppRoutes.addEntry, arguments: {'action': action});
   }
 
+  void _openParties(String filter) {
+    controller.partyFilter.value = filter;
+    Get.find<NavigationController>().select(1);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () => controller.reload(showLoader: false),
@@ -59,24 +46,43 @@ class HomePage extends GetView<LedgerController> {
           slivers: [
             SliverAppBar(
               floating: true,
-              title: Obx(
-                () => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      controller.data.value?.company.name ?? 'My Hisaab',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const Text(
-                      'Your ledger at a glance',
-                      style: TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
+              titleSpacing: 16,
+              title: Row(
+                children: [
+                  const BrandMark(size: 34),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Obx(
+                      () => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            controller.data.value?.company.name ?? 'My Hisaab',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: displayStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: colors.ink,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          Text(
+                            DateFormat(
+                              'EEEE, d MMMM',
+                              Intl.getCurrentLocale(),
+                            ).format(DateTime.now()),
+                            style: TextStyle(
+                              color: colors.muted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               actions: [
                 IconButton(
@@ -88,64 +94,18 @@ class HomePage extends GetView<LedgerController> {
               ],
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  Obx(() {
-                    final syncing =
-                        controller.syncStatus.value == LedgerSyncStatus.syncing;
-                    final visible =
-                        controller.isOffline.value ||
-                        syncing ||
-                        controller.pendingCount.value > 0 ||
-                        controller.needsAttentionCount.value > 0;
-                    if (!visible) return const SizedBox.shrink();
-                    final message =
-                        controller.message.value ??
-                        (syncing
-                            ? 'Uploading changes saved on this phone.'
-                            : controller.needsAttentionCount.value > 0
-                            ? 'Some saved changes need review before they can sync.'
-                            : controller.pendingCount.value > 0
-                            ? 'Saved on this phone. Hisaab will retry automatically.'
-                            : 'You can keep working. Saved changes will sync when Hisaab reconnects.');
-                    return Padding(
-                      padding: EdgeInsets.only(bottom: 14),
-                      child: OfflineBanner(
-                        message: message,
-                        pendingCount: controller.pendingCount.value,
-                        needsAttentionCount:
-                            controller.needsAttentionCount.value,
-                        isSyncing: syncing,
-                        isOffline: controller.isOffline.value,
-                        lastSyncedAt: controller.lastSyncedAt.value,
-                        onRetry: _retrySync,
-                        onReview: () => showSyncReviewSheet(context),
-                      ),
-                    );
-                  }),
                   Obx(
-                    () => Row(
-                      children: [
-                        Expanded(
-                          child: BalanceCard(
-                            label: 'You will receive',
-                            amountPaise: controller.totalReceive,
-                            kind: BalanceKind.receive,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: BalanceCard(
-                            label: 'You will pay',
-                            amountPaise: controller.totalPay,
-                            kind: BalanceKind.pay,
-                          ),
-                        ),
-                      ],
+                    () => KhataHeroCard(
+                      receivePaise: controller.totalReceive,
+                      payPaise: controller.totalPay,
+                      onReceiveTap: () => _openParties('receive'),
+                      onPayTap: () => _openParties('pay'),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
@@ -163,20 +123,19 @@ class HomePage extends GetView<LedgerController> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 28),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
                         'Recent activity',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const Spacer(),
                       TextButton(
                         onPressed: () =>
-                            Get.find<NavigationController>().select(1),
-                        child: const Text('View parties'),
+                            Get.find<NavigationController>().select(2),
+                        child: const Text('All entries'),
                       ),
                     ],
                   ),
@@ -188,27 +147,37 @@ class HomePage extends GetView<LedgerController> {
                         .toList();
                     if (entries.isEmpty) {
                       return EmptyState(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'No entries yet',
+                        icon: Icons.auto_stories_outlined,
+                        title: 'Your khata is ready',
                         message:
-                            'Tap “You gave” or “You got” to record your first entry.',
+                            'Tap “You gave” or “You got” above to record your '
+                            'first entry.',
                         actionLabel: 'Add a party',
                         onAction: () => Get.toNamed(AppRoutes.addParty),
                       );
                     }
                     return Card(
-                      child: Column(
-                        children: [
-                          for (
-                            var index = 0;
-                            index < entries.length;
-                            index++
-                          ) ...[
-                            EntryTile(entry: entries[index]),
-                            if (index != entries.length - 1)
-                              const Divider(height: 1),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          children: [
+                            for (
+                              var index = 0;
+                              index < entries.length;
+                              index++
+                            ) ...[
+                              EntryTile(
+                                entry: entries[index],
+                                onTap: () => showEntryDetailSheet(
+                                  context,
+                                  entries[index],
+                                ),
+                              ),
+                              if (index != entries.length - 1)
+                                const Divider(height: 1),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     );
                   }),

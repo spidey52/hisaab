@@ -25,6 +25,7 @@ class AmountEntryField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Semantics(
       textField: true,
       label: 'Transaction amount in rupees'.tr,
@@ -35,7 +36,9 @@ class AmountEntryField extends StatelessWidget {
         showCursor: !calculatorVisible,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         textInputAction: TextInputAction.done,
-        style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+        style: displayStyle(fontSize: 30, fontWeight: FontWeight.w700).copyWith(
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'^\d{0,9}(\.\d{0,2})?')),
         ],
@@ -43,10 +46,10 @@ class AmountEntryField extends StatelessWidget {
           labelText: 'Amount'.tr,
           hintText: '0',
           prefixText: '₹ ',
-          prefixStyle: TextStyle(
+          prefixStyle: displayStyle(
             fontSize: 28,
-            fontWeight: FontWeight.w800,
-            color: gave ? AppColors.red : AppColors.green,
+            fontWeight: FontWeight.w700,
+            color: gave ? colors.red : colors.greenDark,
           ),
           suffixIcon: IconButton(
             tooltip:

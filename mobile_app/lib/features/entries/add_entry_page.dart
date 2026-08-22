@@ -41,6 +41,8 @@ class _AddEntryPageState extends State<AddEntryPage>
       ? Get.find<FormDraftService>()
       : EncryptedFormDraftService(Get.find<AppStorage>());
 
+  static const _notePresets = ['Goods', 'Payment', 'Previous balance'];
+
   late EntryAction _action;
   String? _partyId;
   DateTime _date = DateTime.now();
@@ -73,9 +75,7 @@ class _AddEntryPageState extends State<AddEntryPage>
         _date = entry.entryDate;
         _paymentAccount = entry.paymentAccount;
         _optional =
-            entry.narration.isNotEmpty ||
-            dateOnly(entry.entryDate) != dateOnly(DateTime.now()) ||
-            entry.paymentAccount != null;
+            entry.narration.isNotEmpty || entry.paymentAccount != null;
         _calculatorExpression = _amount.text;
         _loadCalculatorPreference();
         _initializeDrafts();
@@ -88,6 +88,13 @@ class _AddEntryPageState extends State<AddEntryPage>
     _partyId = arguments is Map ? arguments['partyId']?.toString() : null;
     final active = _ledger.parties.where((party) => !party.isArchived).toList();
     if (_partyId == null && active.length == 1) _partyId = active.first.id;
+    final prefillPaise = arguments is Map ? arguments['amountPaise'] : null;
+    if (prefillPaise is int && prefillPaise > 0) {
+      // A fresh create started from "Mark settled" arrives with the party
+      // balance pre-filled. A restored draft (below) still wins if one exists.
+      _amount.text = _rupeesForInput(prefillPaise);
+      _calculatorExpression = _amount.text;
+    }
     _loadCalculatorPreference();
     _initializeDrafts();
   }
@@ -279,6 +286,11 @@ class _AddEntryPageState extends State<AddEntryPage>
     }
   }
 
+  void _setDate(DateTime value) {
+    setState(() => _date = value);
+    _markDirty();
+  }
+
   Future<void> _toggleCalculator() async {
     final next = !_calculatorVisible;
     if (next) FocusScope.of(context).unfocus();
@@ -298,6 +310,13 @@ class _AddEntryPageState extends State<AddEntryPage>
       _calculatorExpression = _amount.text;
     });
     FocusScope.of(context).unfocus();
+  }
+
+  void _applyNotePreset(String preset) {
+    setState(() {
+      _note.text = preset;
+      _note.selection = TextSelection.collapsed(offset: preset.length);
+    });
   }
 
   Future<String?> _chooseParty(List<Party> parties) =>
@@ -392,6 +411,7 @@ class _AddEntryPageState extends State<AddEntryPage>
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final activeParties = _ledger.parties
         .where((party) => !party.isArchived)
         .toList();
@@ -416,13 +436,15 @@ class _AddEntryPageState extends State<AddEntryPage>
                 : gave
                 ? 'You gave'.tr
                 : 'You got'.tr,
-            style: TextStyle(
+            style: displayStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.2,
               color: _editingEntry != null
-                  ? AppColors.ink
+                  ? colors.ink
                   : gave
-                  ? AppColors.red
-                  : AppColors.green,
-              fontWeight: FontWeight.w800,
+                  ? colors.red
+                  : colors.green,
             ),
           ),
         ),
@@ -464,42 +486,36 @@ class _AddEntryPageState extends State<AddEntryPage>
                 if (Get.arguments is Map &&
                     (Get.arguments as Map)['partyId'] != null &&
                     fixedParty != null)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.line),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.person_outline_rounded,
-                          color: AppColors.muted,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Party'.tr,
-                                style: const TextStyle(
-                                  color: AppColors.muted,
-                                  fontSize: 12,
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          _PartyAvatarTile(name: fixedParty.name),
+                          const SizedBox(width: 13),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Party'.tr,
+                                  style: TextStyle(
+                                    color: colors.muted,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                fixedParty.name,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
+                                Text(
+                                  fixedParty.name,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   )
                 else
@@ -531,6 +547,15 @@ class _AddEntryPageState extends State<AddEntryPage>
                   onToggleCalculator: _toggleCalculator,
                   onChanged: (_) => setState(() {}),
                 ),
+                const SizedBox(height: 12),
+                _DateChipRow(
+                  date: _date,
+                  onToday: () => _setDate(DateTime.now()),
+                  onYesterday: () => _setDate(
+                    DateTime.now().subtract(const Duration(days: 1)),
+                  ),
+                  onPickDate: _pickDate,
+                ),
                 if (_calculatorVisible) ...[
                   const SizedBox(height: 12),
                   CalculatorKeypad(
@@ -553,8 +578,8 @@ class _AddEntryPageState extends State<AddEntryPage>
                         ),
                         subtitle: Text(
                           _optional
-                              ? 'Note, date, and cash or bank'
-                              : 'Add a note or change today’s date',
+                              ? 'Note and cash or bank'
+                              : 'Add a note or payment account',
                         ),
                         trailing: Icon(
                           _optional
@@ -570,7 +595,22 @@ class _AddEntryPageState extends State<AddEntryPage>
                         Padding(
                           padding: const EdgeInsets.fromLTRB(14, 2, 14, 16),
                           child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (final preset in _notePresets)
+                                    ActionChip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text(preset),
+                                      onPressed: () =>
+                                          _applyNotePreset(preset),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
                               TextField(
                                 controller: _note,
                                 maxLength: 240,
@@ -582,16 +622,6 @@ class _AddEntryPageState extends State<AddEntryPage>
                                   labelText: 'Note (optional)'.tr,
                                   hintText: 'Example: Goods or payment',
                                   counterText: '',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: _pickDate,
-                                icon: const Icon(Icons.calendar_today_outlined),
-                                label: Text(
-                                  dateOnly(_date) == dateOnly(DateTime.now())
-                                      ? 'Date: Today'.tr
-                                      : 'Date: ${formatShortDate(_date)}',
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -643,7 +673,7 @@ class _AddEntryPageState extends State<AddEntryPage>
                         : _editingEntry == null
                         ? 'Save entry'.tr
                         : 'Save changes'.tr,
-                    backgroundColor: gave ? AppColors.red : AppColors.green,
+                    backgroundColor: gave ? colors.red : colors.green,
                   ),
                 ),
               ],
@@ -666,6 +696,90 @@ class _AddEntryPageState extends State<AddEntryPage>
       value != null && Uuid.isValidUUID(fromString: value);
 }
 
+/// One-tap entry-date choices: Today, Yesterday, or the full calendar.
+class _DateChipRow extends StatelessWidget {
+  const _DateChipRow({
+    required this.date,
+    required this.onToday,
+    required this.onYesterday,
+    required this.onPickDate,
+  });
+
+  final DateTime date;
+  final VoidCallback onToday;
+  final VoidCallback onYesterday;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = dateOnly(DateTime.now());
+    final yesterday = dateOnly(DateTime.now().subtract(const Duration(days: 1)));
+    final selected = dateOnly(date);
+    final isToday = selected == today;
+    final isYesterday = selected == yesterday;
+    final isCustom = !isToday && !isYesterday;
+
+    return Semantics(
+      container: true,
+      label: 'Entry date',
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ChoiceChip(
+              label: const Text('Today'),
+              selected: isToday,
+              onSelected: (_) => onToday(),
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              label: const Text('Yesterday'),
+              selected: isYesterday,
+              onSelected: (_) => onYesterday(),
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              avatar: const Icon(Icons.calendar_today_outlined, size: 16),
+              label: Text(isCustom ? formatShortDate(date) : 'Pick a date'),
+              selected: isCustom,
+              onSelected: (_) => onPickDate(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Rounded-square initials tile matching `party_tile.dart`.
+class _PartyAvatarTile extends StatelessWidget {
+  const _PartyAvatarTile({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: 46,
+      height: 46,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.greenSoft,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Text(
+        initials(name),
+        style: displayStyle(
+          fontSize: 16,
+          color: colors.greenDark,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class _PartyPickerField extends StatelessWidget {
   const _PartyPickerField({
     required this.party,
@@ -679,32 +793,92 @@ class _PartyPickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final hasError = errorText != null;
     return Semantics(
       button: true,
       label: party == null
           ? 'Choose a customer or supplier'.tr
           : '${'Party'.tr}, ${party!.name}',
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: InputDecorator(
-          isEmpty: party == null,
-          decoration: InputDecoration(
-            labelText: 'Party'.tr,
-            prefixIcon: const Icon(Icons.person_outline_rounded),
-            suffixIcon: const Icon(Icons.search_rounded),
-            errorText: errorText,
-          ),
-          child: Text(
-            party?.name ?? 'Choose a customer or supplier'.tr,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: party == null ? AppColors.muted : AppColors.ink,
-              fontWeight: party == null ? FontWeight.w400 : FontWeight.w700,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Material(
+            color: colors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: hasError ? colors.red : colors.line,
+                width: hasError ? 1.4 : 1,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    if (party == null)
+                      Container(
+                        width: 46,
+                        height: 46,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colors.settledSoft,
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Icon(
+                          Icons.person_outline_rounded,
+                          color: colors.muted,
+                        ),
+                      )
+                    else
+                      _PartyAvatarTile(name: party!.name),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Party'.tr,
+                            style: TextStyle(color: colors.muted, fontSize: 12),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            party?.name ??
+                                'Choose a customer or supplier'.tr,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: party == null ? colors.muted : colors.ink,
+                              fontWeight: party == null
+                                  ? FontWeight.w400
+                                  : FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.search_rounded, color: colors.muted),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+          if (hasError)
+            Padding(
+              padding: const EdgeInsets.only(left: 14, top: 6),
+              child: Text(
+                errorText!,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.red),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -728,6 +902,7 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final query = _query.trim().toLowerCase();
     final parties = query.isEmpty
         ? widget.parties
@@ -753,9 +928,7 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
               children: [
                 Text(
                   'Choose a party'.tr,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -784,11 +957,7 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
                           horizontal: 16,
                           vertical: 4,
                         ),
-                        leading: CircleAvatar(
-                          backgroundColor: AppColors.greenSoft,
-                          foregroundColor: AppColors.greenDark,
-                          child: Text(initials(party.name)),
-                        ),
+                        leading: _PartyAvatarTile(name: party.name),
                         title: Text(
                           party.name,
                           maxLines: 2,
@@ -803,9 +972,9 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                         trailing: party.id == widget.selectedPartyId
-                            ? const Icon(
+                            ? Icon(
                                 Icons.check_circle_rounded,
-                                color: AppColors.green,
+                                color: colors.green,
                               )
                             : const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, party.id),

@@ -28,6 +28,7 @@ class _SplashPageState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -37,31 +38,27 @@ class _SplashPageState extends State<SplashPage> {
               () => Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const BrandMark(size: 76),
-                  const SizedBox(height: 22),
+                  const BrandMark(size: 64, showName: true),
+                  const SizedBox(height: 12),
                   Text(
-                    'Hisaab',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
                     'Simple records. Clear balances.',
-                    style: TextStyle(color: AppColors.muted),
+                    style: TextStyle(color: colors.muted),
                   ),
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 34),
                   if (_controller.errorMessage.value == null)
-                    const SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(strokeWidth: 3),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: colors.muted,
+                      ),
                     )
                   else ...[
                     Text(
                       _controller.errorMessage.value!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.red),
+                      style: TextStyle(color: colors.red),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.tonal(

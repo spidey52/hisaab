@@ -5,13 +5,17 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../data/models/models.dart';
+import 'balance_widgets.dart';
 
+/// Compact two-line party row: name on one full-width line, a merged
+/// phone-and-entry-count line beneath it, and the balance right-aligned
+/// with a short caption. Direction is carried by color, sign, and the
+/// caption together — never color alone.
 class PartyTile extends StatelessWidget {
   const PartyTile({
     super.key,
     required this.party,
     this.onTap,
-    this.onCall,
     this.showTransactionCount = false,
     this.contentPadding = const EdgeInsets.symmetric(
       horizontal: 4,
@@ -21,53 +25,22 @@ class PartyTile extends StatelessWidget {
 
   final Party party;
   final VoidCallback? onTap;
-  final VoidCallback? onCall;
   final bool showTransactionCount;
   final EdgeInsetsGeometry contentPadding;
 
   @override
   Widget build(BuildContext context) {
     final kind = party.balanceKind;
-    final color = switch (kind) {
-      BalanceKind.receive => AppColors.greenDark,
-      BalanceKind.pay => AppColors.red,
-      BalanceKind.settled => AppColors.muted,
-    };
-    final soft = switch (kind) {
-      BalanceKind.receive => AppColors.greenSoft,
-      BalanceKind.pay => AppColors.redSoft,
-      BalanceKind.settled => const Color(0xFFF0F3F1),
-    };
-    final balanceLabel = (switch (kind) {
-      BalanceKind.receive => 'You will receive',
-      BalanceKind.pay => 'You will pay',
-      BalanceKind.settled => 'Settled',
-    }).tr;
-    final secondary = party.phone.trim().isNotEmpty
-        ? formatPhoneForDisplay(party.phone)
-        : party.shortName.trim();
+    final tones = balanceTones(context, kind);
+    final semanticBalance = balanceKindLabel(kind).tr;
     final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.35;
     final identity = _PartyIdentity(
       party: party,
-      color: color,
-      soft: soft,
-      secondary: secondary,
-      showTransactionCount: showTransactionCount,
+      color: tones.foreground,
+      soft: tones.background,
+      secondary: _secondaryLine(),
     );
-    final balance = _PartyBalance(
-      party: party,
-      kind: kind,
-      color: color,
-      label: balanceLabel,
-    );
-    final call = onCall == null
-        ? null
-        : IconButton(
-            tooltip: '${'Call'.tr} ${party.name}',
-            onPressed: onCall,
-            icon: const Icon(Icons.call_outlined),
-            color: AppColors.greenDark,
-          );
+    final balance = _PartyBalance(kind: kind, party: party, tones: tones);
 
     final child = Padding(
       padding: contentPadding,
@@ -75,53 +48,31 @@ class PartyTile extends StatelessWidget {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: identity),
-                    ?call,
-                  ],
-                ),
-                const SizedBox(height: 10),
+                identity,
+                const SizedBox(height: 8),
                 Padding(
-                  padding: const EdgeInsets.only(left: 59),
-                  child: Row(
-                    children: [
-                      Expanded(child: balance),
-                      if (onTap != null)
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          color: AppColors.muted,
-                        ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.only(left: 53),
+                  child: Align(alignment: Alignment.centerLeft, child: balance),
                 ),
               ],
             )
           : Row(
               children: [
                 Expanded(child: identity),
-                ?call,
-                const SizedBox(width: 4),
-                Flexible(child: balance),
-                if (onTap != null)
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    size: 21,
-                    color: AppColors.muted,
-                  ),
+                const SizedBox(width: 10),
+                balance,
               ],
             ),
     );
 
     return Semantics(
       container: true,
-      explicitChildNodes: onCall != null,
       button: onTap != null,
       label:
-          '${party.name}, $balanceLabel'
-          '${kind == BalanceKind.settled ? '' : ', ${formatMoney(party.balancePaise, absolute: true)}'}',
+          '${party.name}, $semanticBalance'
+          '${kind == BalanceKind.settled ? '' : ' ${formatMoney(party.balancePaise, absolute: true)}'}',
       child: Opacity(
-        opacity: party.isArchived ? 0.68 : 1,
+        opacity: party.isArchived ? 0.65 : 1,
         child: onTap == null
             ? child
             : Material(
@@ -135,6 +86,23 @@ class PartyTile extends StatelessWidget {
       ),
     );
   }
+
+  String _secondaryLine() {
+    final phone = party.phone.trim().isEmpty
+        ? ''
+        : _compactPhone(formatPhoneForDisplay(party.phone));
+    final identity = phone.isNotEmpty ? phone : party.shortName.trim();
+    if (!showTransactionCount || party.transactionCount <= 0) return identity;
+    final count =
+        '${party.transactionCount} '
+        '${party.transactionCount == 1 ? 'entry' : 'entries'}';
+    return identity.isEmpty ? count : '$identity · $count';
+  }
+
+  /// Local numbers drop the +91 prefix so they fit without truncation;
+  /// foreign numbers keep their country code.
+  static String _compactPhone(String display) =>
+      display.startsWith('+91 ') ? display.substring(4) : display;
 }
 
 class _PartyIdentity extends StatelessWidget {
@@ -143,25 +111,33 @@ class _PartyIdentity extends StatelessWidget {
     required this.color,
     required this.soft,
     required this.secondary,
-    required this.showTransactionCount,
   });
 
   final Party party;
   final Color color;
   final Color soft;
   final String secondary;
-  final bool showTransactionCount;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Row(
       children: [
-        CircleAvatar(
-          radius: 23,
-          backgroundColor: soft,
+        Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: soft,
+            borderRadius: BorderRadius.circular(13),
+          ),
           child: Text(
             initials(party.name),
-            style: TextStyle(color: color, fontWeight: FontWeight.w800),
+            style: displayStyle(
+              fontSize: 14,
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
         const SizedBox(width: 13),
@@ -169,41 +145,33 @@ class _PartyIdentity extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(
-                spacing: 7,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
                 children: [
-                  Text(
-                    party.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+                  Flexible(
+                    child: Text(
+                      party.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
-                  if (party.isArchived) const _ArchivedLabel(),
+                  if (party.isArchived) ...[
+                    const SizedBox(width: 7),
+                    const _ArchivedLabel(),
+                  ],
                 ],
               ),
               if (secondary.isNotEmpty) ...[
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Text(
                   secondary,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(
                     context,
-                  ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
-                ),
-              ],
-              if (showTransactionCount && party.transactionCount > 0) ...[
-                const SizedBox(height: 3),
-                Text(
-                  '${party.transactionCount} '
-                  '${party.transactionCount == 1 ? 'entry' : 'entries'}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                  ).textTheme.bodySmall?.copyWith(color: colors.muted),
                 ),
               ],
             ],
@@ -216,42 +184,62 @@ class _PartyIdentity extends StatelessWidget {
 
 class _PartyBalance extends StatelessWidget {
   const _PartyBalance({
-    required this.party,
     required this.kind,
-    required this.color,
-    required this.label,
+    required this.party,
+    required this.tones,
   });
 
-  final Party party;
   final BalanceKind kind;
-  final Color color;
-  final String label;
+  final Party party;
+  final ({Color foreground, Color background, Color border}) tones;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (kind != BalanceKind.settled)
-          Text(
-            formatMoney(party.balancePaise, absolute: true),
-            maxLines: 2,
-            textAlign: TextAlign.end,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        Text(
-          label,
-          textAlign: TextAlign.end,
+    if (kind == BalanceKind.settled) {
+      final colors = context.colors;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: colors.settledSoft,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          'Settled'.tr,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: color,
+            color: colors.muted,
             fontWeight: FontWeight.w700,
           ),
         ),
-      ],
+      );
+    }
+
+    final caption = (kind == BalanceKind.receive ? 'To receive' : 'To pay').tr;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 130),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Text(
+              formatMoney(party.balancePaise, absolute: true),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: tones.foreground,
+                fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Text(
+            caption,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: tones.foreground,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -261,16 +249,17 @@ class _ArchivedLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F3F1),
+        color: colors.settledSoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         'Archived',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: AppColors.muted,
+          color: colors.muted,
           fontWeight: FontWeight.w700,
         ),
       ),

@@ -3,8 +3,7 @@ import 'package:get/get.dart';
 
 import '../../app/app.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/phone_utils.dart';
-import '../../services/party_communication_service.dart';
+import '../../data/models/models.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/party_tile.dart';
 import '../ledger/ledger_controller.dart';
@@ -12,17 +11,18 @@ import '../ledger/ledger_controller.dart';
 class PartiesPage extends GetView<LedgerController> {
   const PartiesPage({super.key});
 
-  PartyCommunicationService get _communication =>
-      Get.isRegistered<PartyCommunicationService>()
-      ? Get.find<PartyCommunicationService>()
-      : const DevicePartyCommunicationService();
-
   static const _filters = <String, String>{
     'active': 'All active',
     'receive': 'To receive',
     'pay': 'To pay',
     'settled': 'Settled',
     'archived': 'Archived',
+  };
+
+  static const _sorts = <String, String>{
+    'name': 'Name',
+    'balance': 'Highest balance',
+    'recent': 'Recent',
   };
 
   Future<void> _openFilters(BuildContext context) async {
@@ -37,9 +37,7 @@ class PartiesPage extends GetView<LedgerController> {
             children: [
               Text(
                 'Show parties',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 8),
               for (final filter in _filters.entries)
@@ -47,9 +45,9 @@ class PartiesPage extends GetView<LedgerController> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                   title: Text(filter.value),
                   trailing: controller.partyFilter.value == filter.key
-                      ? const Icon(
+                      ? Icon(
                           Icons.check_circle_rounded,
-                          color: AppColors.green,
+                          color: context.colors.green,
                         )
                       : null,
                   onTap: () => Navigator.pop(context, filter.key),
@@ -62,45 +60,46 @@ class PartiesPage extends GetView<LedgerController> {
     if (selected != null) controller.partyFilter.value = selected;
   }
 
-  Future<void> _call(BuildContext context, String phone) async {
-    try {
-      await _communication.openDialer(phone);
-    } on CommunicationException catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+  List<Party> _sortedParties() {
+    final parties = [...controller.filteredParties];
+    switch (controller.partySort.value) {
+      case 'balance':
+        parties.sort(
+          (a, b) => b.balancePaise.abs().compareTo(a.balancePaise.abs()),
+        );
+      case 'recent':
+        final lastActivity = <String, DateTime>{};
+        for (final entry in controller.entries) {
+          final current = lastActivity[entry.partyId];
+          if (current == null || entry.createdAt.isAfter(current)) {
+            lastActivity[entry.partyId] = entry.createdAt;
+          }
+        }
+        DateTime activityOf(Party party) =>
+            lastActivity[party.id] ?? party.createdAt;
+        parties.sort((a, b) => activityOf(b).compareTo(activityOf(a)));
+      default:
+        parties.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
     }
+    return parties;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Parties'.tr,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: Text('Parties'.tr)),
       body: RefreshIndicator(
         onRefresh: () => controller.reload(showLoader: false),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      onChanged: (value) =>
-                          controller.partySearch.value = value,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: 'Search name or phone'.tr,
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        isDense: true,
-                      ),
-                    ),
+                    child: _PartySearchField(search: controller.partySearch),
                   ),
                   const SizedBox(width: 10),
                   Obx(
@@ -121,9 +120,30 @@ class PartiesPage extends GetView<LedgerController> {
                 ],
               ),
             ),
+            SizedBox(
+              height: 52,
+              child: Obx(
+                () => ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                  children: [
+                    for (final sort in _sorts.entries) ...[
+                      ChoiceChip(
+                        label: Text(sort.value.tr),
+                        visualDensity: VisualDensity.compact,
+                        selected: controller.partySort.value == sort.key,
+                        onSelected: (_) =>
+                            controller.partySort.value = sort.key,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ),
             Expanded(
               child: Obx(() {
-                final parties = controller.filteredParties;
+                final parties = _sortedParties();
                 if (parties.isEmpty) {
                   final searching = controller.partySearch.value.isNotEmpty;
                   return ListView(
@@ -161,9 +181,6 @@ class PartiesPage extends GetView<LedgerController> {
                         AppRoutes.party,
                         arguments: {'partyId': party.id},
                       ),
-                      onCall: normalizePhoneE164(party.phone).isEmpty
-                          ? null
-                          : () => _call(context, party.phone),
                     );
                   },
                 );
@@ -176,6 +193,62 @@ class PartiesPage extends GetView<LedgerController> {
         onPressed: () => Get.toNamed(AppRoutes.addParty),
         icon: const Icon(Icons.add_rounded),
         label: Text('Add party'.tr),
+      ),
+    );
+  }
+}
+
+/// Search box for the party list with a clear (×) button that appears only
+/// while the query is non-empty. Keeps [search] in sync with the field.
+class _PartySearchField extends StatefulWidget {
+  const _PartySearchField({required this.search});
+
+  final RxString search;
+
+  @override
+  State<_PartySearchField> createState() => _PartySearchFieldState();
+}
+
+class _PartySearchFieldState extends State<_PartySearchField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.search.value);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _clear() {
+    _controller.clear();
+    widget.search.value = '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: _controller,
+      builder: (context, value, _) => TextField(
+        controller: _controller,
+        onChanged: (text) => widget.search.value = text,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search name or phone'.tr,
+          prefixIcon: const Icon(Icons.search_rounded),
+          isDense: true,
+          suffixIcon: value.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search'.tr,
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  onPressed: _clear,
+                ),
+        ),
       ),
     );
   }

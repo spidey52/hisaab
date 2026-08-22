@@ -419,14 +419,12 @@ class _AddPartyPageState extends State<AddPartyPage>
             children: [
               Text(
                 'Choose a number'.tr,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 4),
               Text(
                 contact.name,
-                style: const TextStyle(color: AppColors.muted),
+                style: TextStyle(color: context.colors.muted),
               ),
               const SizedBox(height: 10),
               for (final phone in contact.phones)
@@ -595,7 +593,7 @@ class _AddPartyPageState extends State<AddPartyPage>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: error ? AppColors.red : null,
+        backgroundColor: error ? context.colors.red : null,
       ),
     );
   }
@@ -611,12 +609,7 @@ class _AddPartyPageState extends State<AddPartyPage>
         if (!didPop) unawaited(_handleBackNavigation());
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            (_editing ? 'Edit party' : 'Add party').tr,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
+        appBar: AppBar(title: Text((_editing ? 'Edit party' : 'Add party').tr)),
         body: SafeArea(
           top: false,
           child: Form(
@@ -649,7 +642,7 @@ class _AddPartyPageState extends State<AddPartyPage>
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Text(
                           'or enter manually'.tr,
-                          style: const TextStyle(color: AppColors.muted),
+                          style: TextStyle(color: context.colors.muted),
                         ),
                       ),
                       const Expanded(child: Divider()),
@@ -841,14 +834,12 @@ class _ContactDirectorySheetState extends State<_ContactDirectorySheet> {
               children: [
                 Text(
                   'Choose a contact'.tr,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Manual entry remains available if you do not want to use contacts.',
-                  style: TextStyle(color: AppColors.muted),
+                  style: TextStyle(color: context.colors.muted),
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -899,10 +890,10 @@ class _ContactDirectorySheetState extends State<_ContactDirectorySheet> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person_search_outlined,
                         size: 42,
-                        color: AppColors.muted,
+                        color: context.colors.muted,
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -949,9 +940,11 @@ class _ContactSection extends StatelessWidget {
           sliver: SliverToBoxAdapter(
             child: Text(
               title,
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                color: context.colors.muted,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
             ),
           ),
         ),
@@ -972,13 +965,23 @@ class _ContactSection extends StatelessWidget {
                   '${badge == null ? '' : ', $badge'}',
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.greenSoft,
-                  foregroundColor: AppColors.greenDark,
+                leading: Container(
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.colors.greenSoft,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Text(
                     contact.name.trim().isEmpty
                         ? '?'
                         : contact.name.trim().characters.first.toUpperCase(),
+                    style: displayStyle(
+                      fontSize: 15,
+                      color: context.colors.greenDark,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 title: Text(
@@ -1020,18 +1023,19 @@ class _ContactBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: emphasized ? AppColors.greenSoft : const Color(0xFFF0F3F1),
+        color: emphasized ? colors.greenSoft : colors.settledSoft,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: emphasized ? AppColors.greenDark : AppColors.muted,
+          color: emphasized ? colors.greenDark : colors.muted,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -1045,25 +1049,28 @@ class _ContactPrivacyNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E7),
+        color: colors.amberSoft,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Color.alphaBlend(
+            colors.amber.withValues(alpha: 0.16),
+            colors.amberSoft,
+          ),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.privacy_tip_outlined,
-            color: AppColors.amber,
-            size: 20,
-          ),
+          Icon(Icons.privacy_tip_outlined, color: colors.amber, size: 20),
           const SizedBox(width: 9),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(color: AppColors.muted, height: 1.35),
+              style: TextStyle(color: colors.muted, height: 1.35),
             ),
           ),
         ],

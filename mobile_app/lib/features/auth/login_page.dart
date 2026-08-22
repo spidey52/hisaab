@@ -50,6 +50,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -61,21 +62,24 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: BrandMark(size: 62),
+                  child: BrandMark(size: 72),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 26),
                 Text(
-                  'Welcome to Hisaab',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
+                  'Your khata,\nin your pocket',
+                  style: displayStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    color: colors.ink,
+                    letterSpacing: -0.8,
+                    height: 1.12,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Text(
+                Text(
                   'Use your mobile number to securely open your ledger.',
                   style: TextStyle(
-                    color: AppColors.muted,
+                    color: colors.muted,
                     fontSize: 16,
                     height: 1.45,
                   ),
@@ -153,7 +157,6 @@ class _LoginPageState extends State<LoginPage> {
                   controller: _phone,
                   autofocus: true,
                   maxLength: 10,
-
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.done,
                   autofillHints: const [AutofillHints.telephoneNumber],
@@ -164,7 +167,7 @@ class _LoginPageState extends State<LoginPage> {
                   decoration: const InputDecoration(
                     counterText: '',
                     labelText: 'Mobile number',
-                    hintText: 'Enter your mobile number',
+                    hintText: '98765 43210',
                     prefixIcon: Icon(Icons.phone_outlined),
                   ),
                   validator: (value) {
@@ -178,19 +181,19 @@ class _LoginPageState extends State<LoginPage> {
                   onFieldSubmitted: (_) => _continue(),
                 ),
                 const SizedBox(height: 12),
-                const Row(
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
                       Icons.lock_outline_rounded,
                       size: 18,
-                      color: AppColors.muted,
+                      color: colors.muted,
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'We will send a one-time verification code.',
-                        style: TextStyle(color: AppColors.muted),
+                        style: TextStyle(color: colors.muted),
                       ),
                     ),
                   ],
@@ -211,7 +214,7 @@ class _LoginPageState extends State<LoginPage> {
                           child: Text(
                             _controller.errorMessage.value!,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(color: AppColors.red),
+                            style: TextStyle(color: colors.red),
                           ),
                         ),
                 ),

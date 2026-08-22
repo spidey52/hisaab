@@ -61,56 +61,54 @@ class LearnPage extends StatelessWidget {
       title: 'When the server is offline',
       summary: 'Your last downloaded ledger stays visible.',
       body:
-          'Hisaab can show your most recently downloaded data while offline. '
-          'Reconnect to Tailscale before adding or changing records.',
+          'You can keep adding entries and parties while offline — they are '
+          'saved on your phone and sync automatically when the connection '
+          'returns. Editing, cancelling, and settings need a connection.',
     ),
   ];
 
+  static int _readingMinutes(String body) {
+    final words = body.trim().split(RegExp(r'\s+')).length;
+    return (words / 160).ceil().clamp(1, 99);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Learn',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Learn')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         children: [
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: AppColors.greenSoft,
+              color: colors.greenSoft,
               borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Color.alphaBlend(
+                  colors.greenDark.withValues(alpha: 0.16),
+                  colors.greenSoft,
+                ),
+              ),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.school_rounded,
-                  color: AppColors.greenDark,
-                  size: 30,
-                ),
-                SizedBox(width: 14),
+                Icon(Icons.school_rounded, color: colors.greenDark, size: 30),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Hisaab basics',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Short lessons in simple language. Tap any topic.',
-                        style: TextStyle(
-                          color: AppColors.greenDark,
-                          height: 1.4,
-                        ),
+                        style: TextStyle(color: colors.greenDark, height: 1.4),
                       ),
                     ],
                   ),
@@ -119,34 +117,56 @@ class LearnPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Card(
-            child: Column(
-              children: [
-                for (var index = 0; index < _lessons.length; index++) ...[
-                  ExpansionTile(
-                    leading: Icon(_lessons[index].icon, color: AppColors.green),
-                    title: Text(
-                      _lessons[index].title,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(_lessons[index].summary),
-                    childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-                    expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _lessons[index].body,
-                        style: const TextStyle(
-                          color: AppColors.muted,
-                          height: 1.55,
-                        ),
-                      ),
-                    ],
+          for (final lesson in _lessons) ...[
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: ExpansionTile(
+                shape: const Border(),
+                collapsedShape: const Border(),
+                tilePadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 4,
+                ),
+                leading: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: colors.greenSoft,
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  if (index != _lessons.length - 1) const Divider(height: 1),
+                  alignment: Alignment.center,
+                  child: Icon(lesson.icon, color: colors.greenDark, size: 22),
+                ),
+                title: Text(
+                  lesson.title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '${lesson.summary} · ${_readingMinutes(lesson.body)} min read',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.muted,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+                iconColor: colors.muted,
+                collapsedIconColor: colors.muted,
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lesson.body,
+                    style: TextStyle(color: colors.muted, height: 1.55),
+                  ),
                 ],
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 10),
+          ],
         ],
       ),
     );

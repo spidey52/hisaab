@@ -40,12 +40,14 @@ class AsyncActionButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (busy)
-              const SizedBox(
-                width: 19,
-                height: 19,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: Colors.white,
+              Builder(
+                builder: (context) => SizedBox(
+                  width: 19,
+                  height: 19,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: DefaultTextStyle.of(context).style.color,
+                  ),
                 ),
               )
             else if (icon != null)

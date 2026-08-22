@@ -37,14 +37,15 @@ class EntryTile extends StatelessWidget {
       );
     }
 
+    final colors = context.colors;
     final gave = entry.action == EntryAction.gave;
-    final color = gave ? AppColors.red : AppColors.green;
-    final soft = gave ? AppColors.redSoft : AppColors.greenSoft;
+    final color = gave ? colors.red : colors.greenDark;
+    final soft = gave ? colors.redSoft : colors.greenSoft;
     final direction = gave ? 'You gave' : 'You got';
     final cancelled = entry.status == EntryStatus.cancelled;
     final syncLabel = switch (entry.localSyncStatus) {
       LocalSyncStatus.pending => 'Pending sync',
-      LocalSyncStatus.needsAttention => 'Sync needs attention',
+      LocalSyncStatus.needsAttention => 'Needs attention',
       LocalSyncStatus.synced => null,
     };
     final note = entry.narration.trim();
@@ -55,7 +56,7 @@ class EntryTile extends StatelessWidget {
           '$direction ${formatMoney(entry.amountPaise, absolute: true)} '
           '${entry.partyName}${syncLabel == null ? '' : ', $syncLabel'}',
       child: Opacity(
-        opacity: cancelled ? 0.72 : 1,
+        opacity: cancelled ? 0.65 : 1,
         child: _TappableTile(
           onTap: onTap,
           child: Padding(
@@ -79,7 +80,7 @@ class EntryTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               decoration: cancelled
                                   ? TextDecoration.lineThrough
                                   : null,
@@ -92,7 +93,7 @@ class EntryTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: AppColors.muted),
+                              ?.copyWith(color: colors.muted),
                         ),
                       ],
                       const SizedBox(height: 6),
@@ -107,24 +108,34 @@ class EntryTile extends StatelessWidget {
                           ),
                           if (entry.sequence > 0)
                             Text(
-                              'Entry ${entry.sequence}',
+                              '· No. ${entry.sequence}',
                               style: _metaStyle(context),
                             ),
                           if (showStatus && entry.editedAt != null)
-                            const _StatusLabel(label: 'Edited'),
+                            _StatusPill(
+                              label: 'Edited',
+                              foreground: colors.muted,
+                              background: colors.settledSoft,
+                            ),
                           if (showStatus && cancelled)
-                            const _StatusLabel(
+                            _StatusPill(
                               label: 'Cancelled',
-                              color: AppColors.red,
+                              foreground: colors.red,
+                              background: colors.redSoft,
                             ),
                           if (showStatus && syncLabel != null)
-                            _StatusLabel(
+                            _StatusPill(
                               label: syncLabel,
-                              color:
+                              foreground:
                                   entry.localSyncStatus ==
                                       LocalSyncStatus.needsAttention
-                                  ? AppColors.red
-                                  : AppColors.amber,
+                                  ? colors.red
+                                  : colors.amber,
+                              background:
+                                  entry.localSyncStatus ==
+                                      LocalSyncStatus.needsAttention
+                                  ? colors.redSoft
+                                  : colors.amberSoft,
                             ),
                         ],
                       ),
@@ -136,7 +147,7 @@ class EntryTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: AppColors.muted,
+                                color: colors.muted,
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
@@ -159,6 +170,9 @@ class EntryTile extends StatelessWidget {
                               ?.copyWith(
                                 color: color,
                                 fontWeight: FontWeight.w800,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
                               ),
                         ),
                       ),
@@ -175,10 +189,10 @@ class EntryTile extends StatelessWidget {
                 ),
                 if (onTap != null) ...[
                   const SizedBox(width: 2),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: AppColors.muted,
+                    color: colors.muted,
                   ),
                 ],
               ],
@@ -205,10 +219,11 @@ class _OpeningBalanceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final cancelled = entry.status == EntryStatus.cancelled;
     final syncLabel = switch (entry.localSyncStatus) {
       LocalSyncStatus.pending => 'Pending sync',
-      LocalSyncStatus.needsAttention => 'Sync needs attention',
+      LocalSyncStatus.needsAttention => 'Needs attention',
       LocalSyncStatus.synced => null,
     };
     final direction = entry.balanceEffectPaise > 0
@@ -222,7 +237,7 @@ class _OpeningBalanceTile extends StatelessWidget {
       label:
           'Opening balance, $direction, ${formatMoney(entry.amountPaise, absolute: true)}',
       child: Opacity(
-        opacity: cancelled ? 0.72 : 1,
+        opacity: cancelled ? 0.65 : 1,
         child: _TappableTile(
           onTap: onTap,
           child: Padding(
@@ -230,10 +245,10 @@ class _OpeningBalanceTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _DirectionMark(
+                _DirectionMark(
                   icon: Icons.flag_outlined,
-                  foreground: AppColors.amber,
-                  background: Color(0xFFFFF3E7),
+                  foreground: colors.amber,
+                  background: colors.amberSoft,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -244,7 +259,7 @@ class _OpeningBalanceTile extends StatelessWidget {
                         'Opening balance',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               decoration: cancelled
                                   ? TextDecoration.lineThrough
                                   : null,
@@ -254,7 +269,7 @@ class _OpeningBalanceTile extends StatelessWidget {
                       Text(
                         direction,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.muted,
+                          color: colors.muted,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -268,22 +283,28 @@ class _OpeningBalanceTile extends StatelessWidget {
                           ),
                           if (entry.sequence > 0)
                             Text(
-                              'Entry ${entry.sequence}',
+                              '· No. ${entry.sequence}',
                               style: _metaStyle(context),
                             ),
                           if (cancelled)
-                            const _StatusLabel(
+                            _StatusPill(
                               label: 'Cancelled',
-                              color: AppColors.red,
+                              foreground: colors.red,
+                              background: colors.redSoft,
                             ),
                           if (syncLabel != null)
-                            _StatusLabel(
+                            _StatusPill(
                               label: syncLabel,
-                              color:
+                              foreground:
                                   entry.localSyncStatus ==
                                       LocalSyncStatus.needsAttention
-                                  ? AppColors.red
-                                  : AppColors.amber,
+                                  ? colors.red
+                                  : colors.amber,
+                              background:
+                                  entry.localSyncStatus ==
+                                      LocalSyncStatus.needsAttention
+                                  ? colors.redSoft
+                                  : colors.amberSoft,
                             ),
                         ],
                       ),
@@ -293,7 +314,7 @@ class _OpeningBalanceTile extends StatelessWidget {
                           balanceSentenceText(runningBalancePaise!),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: AppColors.muted,
+                                color: colors.muted,
                                 fontWeight: FontWeight.w600,
                               ),
                         ),
@@ -305,15 +326,16 @@ class _OpeningBalanceTile extends StatelessWidget {
                 Text(
                   formatMoney(entry.amountPaise, absolute: true),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.amber,
+                    color: colors.amber,
                     fontWeight: FontWeight.w800,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
                 if (onTap != null)
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: AppColors.muted,
+                    color: colors.muted,
                   ),
               ],
             ),
@@ -342,7 +364,10 @@ class _DirectionMark extends StatelessWidget {
     return Container(
       width: 42,
       height: 42,
-      decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+      ),
       alignment: Alignment.center,
       child: icon == null
           ? Text(
@@ -379,23 +404,36 @@ class _TappableTile extends StatelessWidget {
   }
 }
 
-class _StatusLabel extends StatelessWidget {
-  const _StatusLabel({required this.label, this.color = AppColors.muted});
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.label,
+    required this.foreground,
+    required this.background,
+  });
 
   final String label;
-  final Color color;
+  final Color foreground;
+  final Color background;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: color,
-        fontWeight: FontWeight.w700,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 }
 
-TextStyle? _metaStyle(BuildContext context) =>
-    Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted);
+TextStyle? _metaStyle(BuildContext context) => Theme.of(
+  context,
+).textTheme.bodySmall?.copyWith(color: context.colors.muted);

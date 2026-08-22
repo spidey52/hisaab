@@ -105,6 +105,7 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final party = _ledger.partyById(_partyId);
     final parsedAmount = _openingAmountPaise();
     final amount = parsedAmount ?? 0;
@@ -118,10 +119,7 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          _editing ? 'Edit opening balance' : 'Opening balance',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+        title: Text(_editing ? 'Edit opening balance' : 'Opening balance'),
       ),
       body: SafeArea(
         top: false,
@@ -133,16 +131,21 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E7),
+                  color: colors.amberSoft,
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFF0CFAC)),
+                  border: Border.all(
+                    color: Color.alphaBlend(
+                      colors.amber.withValues(alpha: 0.16),
+                      colors.amberSoft,
+                    ),
+                  ),
                 ),
-                child: const Row(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.flag_outlined, color: AppColors.amber),
-                    SizedBox(width: 10),
-                    Expanded(
+                    Icon(Icons.flag_outlined, color: colors.amber),
+                    const SizedBox(width: 10),
+                    const Expanded(
                       child: Text(
                         'Use this only for money already due before you started '
                         'recording entries in Hisaab.',
@@ -153,19 +156,14 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
                 ),
               ),
               const SizedBox(height: 18),
-              Text(
-                party.name,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
+              Text(party.name, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 14),
               _DirectionChoice(
                 selected: _direction == 'receive',
                 icon: Icons.south_west_rounded,
                 title: 'They owe you',
                 subtitle: 'You will receive this amount',
-                color: AppColors.green,
+                kind: BalanceKind.receive,
                 onTap: () {
                   setState(() => _direction = 'receive');
                   _markIntentChanged();
@@ -177,7 +175,7 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
                 icon: Icons.north_east_rounded,
                 title: 'You owe them',
                 subtitle: 'You will pay this amount',
-                color: AppColors.red,
+                kind: BalanceKind.pay,
                 onTap: () {
                   setState(() => _direction = 'pay');
                   _markIntentChanged();
@@ -190,10 +188,10 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: displayStyle(fontSize: 28, fontWeight: FontWeight.w700)
+                    .copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(
                     RegExp(r'^\d{0,9}(\.\d{0,2})?'),
@@ -241,7 +239,7 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
                       : 'Set opening balance',
                   busy: _ledger.mutating.value,
                   onPressed: _save,
-                  backgroundColor: AppColors.amber,
+                  backgroundColor: colors.amber,
                 ),
               ),
             ],
@@ -283,7 +281,7 @@ class _DirectionChoice extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.color,
+    required this.kind,
     required this.onTap,
   });
 
@@ -291,46 +289,64 @@ class _DirectionChoice extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Color color;
+  final BalanceKind kind;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? color.withValues(alpha: 0.09) : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: selected ? color : AppColors.line,
-          width: selected ? 2 : 1,
+    final colors = context.colors;
+    final tones = balanceTones(context, kind);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '$title. $subtitle',
+      child: Material(
+        color: selected ? tones.background : colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: selected ? tones.foreground : colors.line,
+            width: selected ? 2 : 1,
+          ),
         ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(color: AppColors.muted),
-                    ),
-                  ],
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: selected ? tones.foreground : colors.muted,
                 ),
-              ),
-              if (selected) Icon(Icons.check_circle_rounded, color: color),
-            ],
+                const SizedBox(width: 12),
+                Icon(icon, color: tones.foreground),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: selected ? tones.foreground : colors.ink,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          color: selected ? tones.foreground : colors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

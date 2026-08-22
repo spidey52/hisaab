@@ -62,6 +62,7 @@ class _OtpPageState extends State<OtpPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final challenge = _controller.challenge.value;
     if (challenge == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => Get.back<void>());
@@ -77,24 +78,33 @@ class _OtpPageState extends State<OtpPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                Icons.mark_chat_read_outlined,
-                size: 54,
-                color: Theme.of(context).colorScheme.primary,
+              Center(
+                child: Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: colors.greenSoft,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.mark_chat_read_outlined,
+                    size: 32,
+                    color: colors.greenDark,
+                  ),
+                ),
               ),
               const SizedBox(height: 22),
               Text(
                 'Enter verification code',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 8),
               Text(
                 'Sent to ${challenge.maskedPhone}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.muted, fontSize: 16),
+                style: TextStyle(color: colors.muted, fontSize: 16),
               ),
               const SizedBox(height: 26),
               TextField(
@@ -103,9 +113,10 @@ class _OtpPageState extends State<OtpPage> {
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: displayStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
+                  color: colors.ink,
                   letterSpacing: 8,
                 ),
                 inputFormatters: [
@@ -148,7 +159,7 @@ class _OtpPageState extends State<OtpPage> {
                         child: Text(
                           _controller.errorMessage.value!,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppColors.red),
+                          style: TextStyle(color: colors.red),
                         ),
                       ),
               ),

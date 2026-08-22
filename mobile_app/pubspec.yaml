@@ -1,5 +1,5 @@
 name: hisaab_mobile
-description: "The Hisaab mobile ledger for Android and iOS."
+description: "The Hisaab mobile ledger for Android and iOS (Bahi-Khata Modern redesign)."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none'
@@ -58,6 +58,7 @@ dependencies:
   pdf: ^3.13.0
   phone_numbers_parser: ^9.0.24
   decimal: ^3.2.5
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:

@@ -27,26 +27,39 @@ class DirectionActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _gave ? AppColors.red : AppColors.green;
-    final soft = _gave ? AppColors.redSoft : AppColors.greenSoft;
+    final colors = context.colors;
+    final color = _gave ? colors.red : colors.green;
+    final deep = _gave ? colors.red : colors.greenDark;
+    final soft = _gave ? colors.redSoft : colors.greenSoft;
     final useSolid = selected || emphasized;
     final label = (_gave ? 'You gave' : 'You got').tr;
     final sign = _gave ? '−' : '+';
+    final disabled = onPressed == null;
+
+    final foreground = disabled
+        ? colors.muted
+        : useSolid
+        ? Colors.white
+        : deep;
 
     return Semantics(
       button: true,
       selected: selected,
       label: '$sign $label',
       child: Material(
-        color: onPressed == null
-            ? AppColors.line
+        color: disabled
+            ? colors.settledSoft
             : useSolid
             ? color
             : soft,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: onPressed == null ? AppColors.line : color,
+            color: disabled
+                ? colors.line
+                : useSolid
+                ? color
+                : Color.alphaBlend(deep.withValues(alpha: 0.22), soft),
             width: selected ? 2 : 1,
           ),
         ),
@@ -70,14 +83,18 @@ class DirectionActionButton extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: useSolid
-                          ? Colors.white.withValues(alpha: 0.16)
-                          : Colors.white,
+                          ? Colors.white.withValues(alpha: 0.18)
+                          : colors.surface,
                       shape: BoxShape.circle,
                     ),
                     child: Text(
                       sign,
                       style: TextStyle(
-                        color: useSolid ? Colors.white : color,
+                        color: disabled
+                            ? colors.muted
+                            : useSolid
+                            ? Colors.white
+                            : deep,
                         fontSize: compact ? 20 : 24,
                         height: 1,
                         fontWeight: FontWeight.w800,
@@ -91,7 +108,7 @@ class DirectionActionButton extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: useSolid ? Colors.white : color,
+                        color: foreground,
                         fontWeight: FontWeight.w800,
                       ),
                     ),

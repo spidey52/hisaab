@@ -17,21 +17,30 @@ class BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final mark = Semantics(
       label: showName ? null : name,
       image: true,
       child: Container(
         width: size,
         height: size,
-        decoration: const BoxDecoration(
-          color: AppColors.green,
-          shape: BoxShape.circle,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [colors.heroTop, colors.heroBottom],
+          ),
+          borderRadius: BorderRadius.circular(size * 0.3),
         ),
         alignment: Alignment.center,
-        child: Icon(
-          Icons.currency_rupee_rounded,
-          size: size * 0.58,
-          color: Colors.white,
+        child: Text(
+          '₹',
+          style: TextStyle(
+            fontSize: size * 0.52,
+            height: 1,
+            fontWeight: FontWeight.w800,
+            color: colors.onBrand,
+          ),
         ),
       ),
     );
@@ -42,13 +51,14 @@ class BrandMark extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         mark,
-        SizedBox(width: size * 0.28),
+        SizedBox(width: size * 0.3),
         Text(
           name,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: AppColors.greenDark,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
+          style: displayStyle(
+            fontSize: size * 0.62,
+            fontWeight: FontWeight.w700,
+            color: colors.ink,
+            letterSpacing: -0.5,
           ),
         ),
       ],

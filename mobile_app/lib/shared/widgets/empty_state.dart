@@ -22,6 +22,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
       padding: padding,
       child: Center(
@@ -31,29 +32,27 @@ class EmptyState extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 58,
-                height: 58,
-                decoration: const BoxDecoration(
-                  color: AppColors.greenSoft,
-                  shape: BoxShape.circle,
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: colors.greenSoft,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 alignment: Alignment.center,
-                child: Icon(icon, size: 28, color: AppColors.greenDark),
+                child: Icon(icon, size: 30, color: colors.greenDark),
               ),
               const SizedBox(height: 16),
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 7),
               Text(
                 message,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.muted,
+                  color: colors.muted,
                   height: 1.45,
                 ),
               ),

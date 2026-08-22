@@ -23,7 +23,7 @@ void main() {
     expect(find.text('−₹1,250'), findsOneWidget);
     expect(find.text('You gave'), findsOneWidget);
     final amount = tester.widget<Text>(find.text('−₹1,250'));
-    expect(amount.style?.color, AppColors.red);
+    expect(amount.style?.color, HisaabColors.light.red);
   });
 
   testWidgets('received entry uses green plus and plain-language label', (
@@ -40,7 +40,7 @@ void main() {
     expect(find.text('+₹50'), findsOneWidget);
     expect(find.text('You got'), findsOneWidget);
     final amount = tester.widget<Text>(find.text('+₹50'));
-    expect(amount.style?.color, AppColors.green);
+    expect(amount.style?.color, HisaabColors.light.greenDark);
   });
 
   testWidgets('blank note does not produce an empty narration row', (
@@ -70,8 +70,8 @@ void main() {
       ),
     );
 
-    expect(find.text('You will receive'), findsOneWidget);
-    expect(find.text('You will pay'), findsOneWidget);
+    expect(find.text('To receive'), findsOneWidget);
+    expect(find.text('To pay'), findsOneWidget);
     expect(find.text('₹250'), findsOneWidget);
     expect(find.text('₹90'), findsOneWidget);
   });
@@ -80,7 +80,6 @@ void main() {
     tester,
   ) async {
     var rowTaps = 0;
-    var callTaps = 0;
     await tester.pumpWidget(
       _testApp(
         PartyTile(
@@ -89,20 +88,17 @@ void main() {
             balancePaise: maximumLedgerAmountPaise,
           ),
           onTap: () => rowTaps++,
-          onCall: () => callTaps++,
         ),
         textScaler: const TextScaler.linear(2),
       ),
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.byTooltip('Call Asha Retail and Wholesale Supplies'), findsOne);
     await tester.tap(
-      find.byTooltip('Call Asha Retail and Wholesale Supplies'),
+      find.text('Asha Retail and Wholesale Supplies'),
       warnIfMissed: false,
     );
-    expect(callTaps, 1);
-    expect(rowTaps, 0);
+    expect(rowTaps, 1);
   });
 
   testWidgets('add-entry amount controls remain usable at 200 percent text', (

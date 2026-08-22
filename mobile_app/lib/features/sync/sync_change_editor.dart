@@ -114,12 +114,10 @@ class _SyncChangeEditorPageState extends State<_SyncChangeEditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          (_isParty ? 'Correct party' : 'Correct entry').tr,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
+        title: Text((_isParty ? 'Correct party' : 'Correct entry').tr),
         actions: [TextButton(onPressed: _save, child: Text('Save'.tr))],
       ),
       body: SafeArea(
@@ -132,10 +130,13 @@ class _SyncChangeEditorPageState extends State<_SyncChangeEditorPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8E7),
+                  color: colors.amberSoft,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppColors.amber.withValues(alpha: 0.35),
+                    color: Color.alphaBlend(
+                      colors.amber.withValues(alpha: 0.16),
+                      colors.amberSoft,
+                    ),
                   ),
                 ),
                 child: Text(
@@ -143,7 +144,7 @@ class _SyncChangeEditorPageState extends State<_SyncChangeEditorPage> {
                           'will be updated—no duplicate will be created.'
                       .tr,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.ink,
+                    color: colors.ink,
                     height: 1.35,
                   ),
                 ),
@@ -232,7 +233,9 @@ class _SyncChangeEditorPageState extends State<_SyncChangeEditorPage> {
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d{0,9}(\.\d{0,2})?')),
       ],
-      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+      style: displayStyle(fontSize: 28, fontWeight: FontWeight.w700).copyWith(
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
       decoration: InputDecoration(labelText: 'Amount'.tr, prefixText: '₹ '),
       validator: (value) => rupeesTextToPaise(value ?? '') == null
           ? 'Enter an amount greater than zero'.tr

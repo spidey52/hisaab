@@ -148,7 +148,9 @@ class _SyncReviewSheetState extends State<_SyncReviewSheet> {
             child: Text('Keep change'.tr),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.red,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: Text('Discard unsynced change'.tr),
           ),
@@ -203,14 +205,13 @@ class _SyncReviewSheetState extends State<_SyncReviewSheet> {
                     children: [
                       Text(
                         'Review sync changes'.tr,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       const SizedBox(height: 3),
                       Text(
                         'These changes are safe on this phone but need action before they can sync.'
                             .tr,
-                        style: const TextStyle(color: AppColors.muted),
+                        style: TextStyle(color: context.colors.muted),
                       ),
                     ],
                   ),
@@ -319,7 +320,9 @@ class _OperationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final category = _errorCategory(operation.lastErrorCategory);
+    final needsAttention = operation.state == OutboxState.needsAttention;
     return Semantics(
       container: true,
       label: '$title. $category. $summary',
@@ -333,9 +336,9 @@ class _OperationCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.error_outline_rounded,
-                    color: AppColors.amber,
+                    color: needsAttention ? colors.red : colors.amber,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -344,15 +347,24 @@ class _OperationCard extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 3),
-                        Text(
-                          summary,
-                          style: const TextStyle(color: AppColors.muted),
-                        ),
+                        Text(summary, style: TextStyle(color: colors.muted)),
                       ],
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  _StatusPill(
+                    label: (needsAttention
+                            ? 'Needs attention'
+                            : 'Retry scheduled')
+                        .tr,
+                    foreground: needsAttention ? colors.red : colors.amber,
+                    background: needsAttention
+                        ? colors.redSoft
+                        : colors.amberSoft,
                   ),
                 ],
               ),
@@ -360,17 +372,23 @@ class _OperationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8E7),
+                  color: colors.redSoft,
                   borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Color.alphaBlend(
+                      colors.red.withValues(alpha: 0.16),
+                      colors.redSoft,
+                    ),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       category,
-                      style: const TextStyle(
-                        color: AppColors.amber,
-                        fontWeight: FontWeight.w800,
+                      style: TextStyle(
+                        color: colors.red,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -382,9 +400,11 @@ class _OperationCard extends StatelessWidget {
                           'HTTP ${operation.lastStatusCode}',
                         'Attempt ${operation.attempts}',
                       ].join(' · '),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.muted,
+                        letterSpacing: 0.2,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ],
                 ),
@@ -434,23 +454,52 @@ class _NoSyncIssues extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.cloud_done_outlined,
-              size: 48,
-              color: AppColors.green,
-            ),
+            Icon(Icons.cloud_done_outlined, size: 48, color: colors.green),
             const SizedBox(height: 12),
             Text(
               'No changes need review'.tr,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({
+    required this.label,
+    required this.foreground,
+    required this.background,
+  });
+
+  final String label;
+  final Color foreground;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
