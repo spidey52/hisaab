@@ -22,7 +22,6 @@ import 'services/app_translations.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  AppConfig.validateForCurrentBuild();
   await Future.wait([
     initializeDateFormatting('en_IN'),
     initializeDateFormatting('hi_IN'),
@@ -36,7 +35,18 @@ Future<void> main() async {
       'en';
   setFormattingLocale(initialLanguage);
 
-  final apiClient = ApiClient(storage);
+  final serverMode = ServerMode.parse(storage.readServerMode());
+  final customApiBaseUrl = storage.readCustomApiBaseUrl();
+  final apiBaseUrl =
+      serverMode == ServerMode.selfHosted &&
+          customApiBaseUrl != null &&
+          AppConfig.isValidSelfHostedApiOrigin(customApiBaseUrl)
+      ? AppConfig.resolveApiBaseUrl(
+          mode: ServerMode.selfHosted,
+          customApiBaseUrl: customApiBaseUrl,
+        )
+      : AppConfig.normalizeApiBaseUrl(AppConfig.cloudApiBaseUrl);
+  final apiClient = ApiClient(storage, baseUrl: apiBaseUrl);
   Get.put<ApiClient>(apiClient, permanent: true);
   Get.put<AuthRepository>(AuthRepository(apiClient, storage), permanent: true);
   Get.put<LedgerRepository>(

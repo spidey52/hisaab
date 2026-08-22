@@ -17,6 +17,8 @@ class AppStorage {
   static const _sessionTokenKey = 'hisaab_session_token_v1';
   static const _databaseKeyKey = 'hisaab_local_database_key_v1';
   static const _legacyBootstrapCacheKey = 'hisaab_bootstrap_cache_v1';
+  static const _serverModeKey = 'hisaab_server_mode_v1';
+  static const _customApiBaseUrlKey = 'hisaab_custom_api_base_url_v1';
 
   final FlutterSecureStorage _secureStorage;
   AppDatabase? _database;
@@ -68,6 +70,28 @@ class AppStorage {
 
   Future<void> clearSessionToken() =>
       _secureStorage.delete(key: _sessionTokenKey);
+
+  /// `cloud` or `selfHosted`. Defaults to cloud when unset.
+  String readServerMode() =>
+      _preferences.getString(_serverModeKey)?.trim() ?? 'cloud';
+
+  Future<void> writeServerMode(String value) =>
+      _preferences.setString(_serverModeKey, value);
+
+  String? readCustomApiBaseUrl() {
+    final value = _preferences.getString(_customApiBaseUrlKey)?.trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  Future<void> writeCustomApiBaseUrl(String? value) async {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      await _preferences.remove(_customApiBaseUrlKey);
+      return;
+    }
+    await _preferences.setString(_customApiBaseUrlKey, trimmed);
+  }
 
   Future<void> cacheBootstrap(Map<String, dynamic> value) async {
     final scope = _scopeFromBootstrap(value);

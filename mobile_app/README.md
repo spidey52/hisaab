@@ -96,7 +96,7 @@ flutter build appbundle --release \
 
 ## iOS release
 
-Open `ios/Runner.xcworkspace`, select the `com.hisaab.app` Runner target, and
+Open `ios/Runner.xcworkspace`, select the `dev.hisaab.app` Runner target, and
 choose the correct Apple Developer team and signing profile. Then build with:
 
 ```sh

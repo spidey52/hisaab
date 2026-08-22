@@ -31,3 +31,8 @@ backend/*.log
 *.ipa
 *.dump
 *.log
+
+# Android release signing
+**/key.properties
+**/*.jks
+**/*.keystore

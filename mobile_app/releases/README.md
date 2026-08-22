@@ -5,12 +5,9 @@ Files in this directory are local test artifacts. In particular,
 Google Play or shared as a production release.
 
 Production Android releases must be generated as an AAB with the configured
-upload keystore and a public HTTPS API origin:
+upload keystore. Cloud sign-in uses the hardcoded live API origin in
+`lib/core/config/app_config.dart`.
 
 ```sh
-flutter build appbundle --release \
-  --dart-define=HISAAB_API_URL=https://api.example.com
+flutter build appbundle --release
 ```
-
-The build now fails when release signing or the production API origin is
-missing.

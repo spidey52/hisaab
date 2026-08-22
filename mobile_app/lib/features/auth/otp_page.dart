@@ -26,11 +26,6 @@ class _OtpPageState extends State<OtpPage> {
     super.initState();
     final challenge = _controller.challenge.value;
     _remaining = challenge?.resendAfterSeconds ?? 60;
-    final testingCode = challenge?.developmentCode;
-    if (testingCode != null) {
-      _code.text = testingCode;
-      _code.selection = TextSelection.collapsed(offset: testingCode.length);
-    }
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _remaining == 0) return;
       setState(() => _remaining--);
@@ -61,7 +56,7 @@ class _OtpPageState extends State<OtpPage> {
     final challenge = _controller.challenge.value;
     setState(() {
       _remaining = challenge?.resendAfterSeconds ?? 60;
-      _code.text = challenge?.developmentCode ?? '';
+      _code.clear();
     });
   }
 
@@ -101,35 +96,10 @@ class _OtpPageState extends State<OtpPage> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.muted, fontSize: 16),
               ),
-              if (challenge.developmentCode != null) ...[
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.greenSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.science_outlined, color: AppColors.greenDark),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Testing mode: the code is filled in for you.',
-                          style: TextStyle(
-                            color: AppColors.greenDark,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 26),
               TextField(
                 controller: _code,
-                autofocus: challenge.developmentCode == null,
+                autofocus: true,
                 keyboardType: TextInputType.number,
                 textInputAction: TextInputAction.done,
                 textAlign: TextAlign.center,

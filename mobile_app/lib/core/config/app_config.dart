@@ -1,38 +1,56 @@
 import 'package:flutter/foundation.dart';
 
+enum ServerMode {
+  cloud,
+  selfHosted;
+
+  static ServerMode parse(String? value) {
+    switch (value?.trim()) {
+      case 'selfHosted':
+        return ServerMode.selfHosted;
+      default:
+        return ServerMode.cloud;
+    }
+  }
+
+  String get storageValue => name;
+}
+
 abstract final class AppConfig {
-  static const _configuredApiBaseUrl = String.fromEnvironment('HISAAB_API_URL');
-  static const _developmentApiBaseUrl = 'http://127.0.0.1:3000';
+  /// Hisaab Cloud API origin used for Cloud sign-in.
+  static const cloudApiBaseUrl = 'https://hisaab.imsat.dev';
 
   static const connectTimeout = Duration(seconds: 12);
   static const receiveTimeout = Duration(seconds: 20);
 
-  static String get apiBaseUrl {
-    final configured = _configuredApiBaseUrl.trim();
-    if (configured.isNotEmpty) return configured;
-    if (kReleaseMode) {
-      throw StateError(
-        'Release builds require '
-        '--dart-define=HISAAB_API_URL=https://your-production-host',
-      );
+  static String resolveApiBaseUrl({
+    required ServerMode mode,
+    String? customApiBaseUrl,
+  }) {
+    if (mode == ServerMode.selfHosted) {
+      final custom = normalizeApiBaseUrl(customApiBaseUrl ?? '');
+      if (custom.isEmpty) {
+        throw StateError('A self-hosted server URL is required.');
+      }
+      return custom;
     }
-    return _developmentApiBaseUrl;
+    return normalizeApiBaseUrl(cloudApiBaseUrl);
   }
 
   static String get normalizedApiBaseUrl =>
-      apiBaseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+      normalizeApiBaseUrl(cloudApiBaseUrl);
 
-  static void validateForCurrentBuild() {
-    if (!kReleaseMode) return;
-    if (!isPublicHttpsApiOrigin(apiBaseUrl)) {
-      throw StateError(
-        'HISAAB_API_URL must be a public HTTPS origin for release builds.',
-      );
+  static String normalizeApiBaseUrl(String value) {
+    var trimmed = value.trim();
+    if (trimmed.isEmpty) return '';
+    if (!trimmed.contains('://')) {
+      trimmed = 'https://$trimmed';
     }
+    return trimmed.replaceFirst(RegExp(r'/+$'), '');
   }
 
   static bool isPublicHttpsApiOrigin(String value) {
-    final uri = Uri.tryParse(value.trim());
+    final uri = Uri.tryParse(normalizeApiBaseUrl(value));
     if (uri == null ||
         uri.scheme != 'https' ||
         !uri.hasAuthority ||
@@ -44,6 +62,32 @@ abstract final class AppConfig {
       return false;
     }
     return !_isDevelopmentOrPrivateHost(uri.host);
+  }
+
+  /// Accepts a full http(s) server URL (scheme + host, optional port/path).
+  /// HTTP is allowed for local/private hosts, or in non-release builds.
+  static bool isValidSelfHostedApiOrigin(String value) {
+    final uri = Uri.tryParse(normalizeApiBaseUrl(value));
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        uri.query.isNotEmpty ||
+        uri.fragment.isNotEmpty) {
+      return false;
+    }
+    if (uri.scheme == 'https') return true;
+    if (uri.scheme != 'http') return false;
+    return !kReleaseMode || _isDevelopmentOrPrivateHost(uri.host);
+  }
+
+  static String? selfHostedApiOriginError(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 'Enter your Hisaab server URL';
+    if (!isValidSelfHostedApiOrigin(trimmed)) {
+      return 'Enter the full server URL, e.g. https://hisaab.example.com';
+    }
+    return null;
   }
 
   static bool _isDevelopmentOrPrivateHost(String value) {

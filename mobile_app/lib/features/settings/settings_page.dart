@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/app.dart';
 import '../../core/config/app_config.dart';
+import '../../core/network/api_client.dart';
 import '../../core/network/api_failure.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/theme/app_theme.dart';
@@ -133,6 +134,24 @@ class MorePage extends StatelessWidget {
                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
+                    'Sign-in mode',
+                    style: TextStyle(
+                      color: AppColors.muted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    ServerMode.parse(
+                              Get.find<AppStorage>().readServerMode(),
+                            ) ==
+                            ServerMode.selfHosted
+                        ? 'Self-hosted'
+                        : 'Hisaab Cloud',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
                     'Server',
                     style: TextStyle(
                       color: AppColors.muted,
@@ -141,14 +160,16 @@ class MorePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   SelectableText(
-                    AppConfig.normalizedApiBaseUrl,
+                    Get.find<ApiClient>().baseUrl,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    'Your phone must be able to reach this secure Hisaab '
+                    'Your phone must be able to reach this Hisaab '
                     'server. If it is unavailable, saved changes remain on '
-                    'this device and sync later.',
+                    'this device and sync later. To use a different server, '
+                    'sign out and choose Cloud or Self-hosted on the login '
+                    'screen.',
                     style: TextStyle(color: AppColors.muted, height: 1.4),
                   ),
                 ],

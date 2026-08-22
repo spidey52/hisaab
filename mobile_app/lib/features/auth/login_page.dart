@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../app/app.dart';
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../shared/widgets/async_action_button.dart';
 import '../../shared/widgets/brand_mark.dart';
@@ -18,11 +19,19 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _controller = Get.find<AuthController>();
   final _phone = TextEditingController();
+  final _serverUrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _serverUrl.text = _controller.customApiBaseUrl.value;
+  }
 
   @override
   void dispose() {
     _phone.dispose();
+    _serverUrl.dispose();
     super.dispose();
   }
 
@@ -71,10 +80,80 @@ class _LoginPageState extends State<LoginPage> {
                     height: 1.45,
                   ),
                 ),
-                const SizedBox(height: 34),
+                const SizedBox(height: 28),
+                Text(
+                  'Sign in with',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 10),
+                Obx(() {
+                  final mode = _controller.serverMode.value;
+                  return SegmentedButton<ServerMode>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<ServerMode>(
+                        value: ServerMode.cloud,
+                        label: Text('Hisaab Cloud'),
+                        icon: Icon(Icons.cloud_outlined, size: 18),
+                      ),
+                      ButtonSegment<ServerMode>(
+                        value: ServerMode.selfHosted,
+                        label: Text('Self-hosted'),
+                        icon: Icon(Icons.dns_outlined, size: 18),
+                      ),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (value) {
+                      _controller.selectServerMode(value.first);
+                    },
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: WidgetStateProperty.all(
+                        const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                Obx(() {
+                  if (_controller.serverMode.value != ServerMode.selfHosted) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: TextFormField(
+                      controller: _serverUrl,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.url],
+                      autocorrect: false,
+                      onChanged: _controller.updateCustomApiBaseUrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Server URL',
+                        hintText: 'https://hisaab.example.com',
+                        helperText: 'Enter the full URL of your Hisaab server',
+                        prefixIcon: Icon(Icons.link_rounded),
+                      ),
+                      validator: (value) {
+                        if (_controller.serverMode.value !=
+                            ServerMode.selfHosted) {
+                          return null;
+                        }
+                        return AppConfig.selfHostedApiOriginError(value ?? '');
+                      },
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
                 TextFormField(
                   controller: _phone,
                   autofocus: true,
+                  maxLength: 10,
+
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.done,
                   autofillHints: const [AutofillHints.telephoneNumber],
@@ -83,8 +162,9 @@ class _LoginPageState extends State<LoginPage> {
                     LengthLimitingTextInputFormatter(18),
                   ],
                   decoration: const InputDecoration(
+                    counterText: '',
                     labelText: 'Mobile number',
-                    hintText: '98765 43210',
+                    hintText: 'Enter your mobile number',
                     prefixIcon: Icon(Icons.phone_outlined),
                   ),
                   validator: (value) {
