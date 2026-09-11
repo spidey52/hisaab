@@ -9,12 +9,14 @@ import '../../app/app.dart';
 import '../../core/network/api_failure.dart';
 import '../../core/storage/app_storage.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/formatters.dart';
 import '../../core/utils/phone_utils.dart';
 import '../../data/models/models.dart';
 import '../../data/repositories/ledger_repository.dart';
 import '../../services/contact_discovery_consent_service.dart';
 import '../../services/contact_service.dart';
 import '../../services/form_draft_service.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/async_action_button.dart';
 import '../ledger/ledger_controller.dart';
 
@@ -156,8 +158,10 @@ class _AddPartyPageState extends State<AddPartyPage>
     });
     _restoringDraft = false;
     _dirty = true;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Your saved party draft was restored.')),
+    AppSnackbar.info(
+      title: 'Draft restored',
+      message: 'Your saved party draft was restored.',
+      position: SnackbarPosition.bottom,
     );
   }
 
@@ -194,44 +198,10 @@ class _AddPartyPageState extends State<AddPartyPage>
   }
 
   Future<void> _createGroup() async {
-    final name = TextEditingController();
     final groupName = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Create a party group'.tr),
-        content: TextField(
-          controller: name,
-          autofocus: true,
-          maxLength: 80,
-          textCapitalization: TextCapitalization.words,
-          textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            labelText: 'Group name'.tr,
-            hintText: 'For example: Wholesale'.tr,
-            counterText: '',
-          ),
-          onSubmitted: (value) {
-            final trimmed = value.trim();
-            if (trimmed.length >= 2) Navigator.pop(dialogContext, trimmed);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text('Cancel'.tr),
-          ),
-          FilledButton(
-            onPressed: () {
-              final trimmed = name.text.trim();
-              if (trimmed.length < 2) return;
-              Navigator.pop(dialogContext, trimmed);
-            },
-            child: Text('Create group'.tr),
-          ),
-        ],
-      ),
+      builder: (dialogContext) => const _CreateGroupDialog(),
     );
-    name.dispose();
     if (groupName == null || !mounted) return;
 
     try {
@@ -239,14 +209,18 @@ class _AddPartyPageState extends State<AddPartyPage>
       if (!mounted) return;
       setState(() => _groupId = group.id);
       _markDirty();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${group.name} group created.')));
+      AppSnackbar.success(
+        title: 'Group created',
+        message: '${group.name} is ready to use.',
+        position: SnackbarPosition.bottom,
+      );
     } on ApiFailure catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not create group',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     }
   }
 
@@ -321,6 +295,7 @@ class _AddPartyPageState extends State<AddPartyPage>
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
+        backgroundColor: Colors.transparent,
         builder: (context) => _ContactDirectorySheet(directory: directory),
       );
       if (contact == null || !mounted) return;
@@ -422,10 +397,7 @@ class _AddPartyPageState extends State<AddPartyPage>
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 4),
-              Text(
-                contact.name,
-                style: TextStyle(color: context.colors.muted),
-              ),
+              Text(contact.name, style: TextStyle(color: context.colors.muted)),
               const SizedBox(height: 10),
               for (final phone in contact.phones)
                 ListTile(
@@ -508,10 +480,10 @@ class _AddPartyPageState extends State<AddPartyPage>
       if (queued != null) {
         _showQueuedParty(queued);
       } else {
-        Get.snackbar(
-          'Party updated',
-          'The party details were saved.',
-          snackPosition: SnackPosition.BOTTOM,
+        AppSnackbar.success(
+          title: 'Party updated',
+          message: 'The party details were saved.',
+          position: SnackbarPosition.bottom,
         );
       }
     } on ApiFailure catch (error) {
@@ -525,29 +497,32 @@ class _AddPartyPageState extends State<AddPartyPage>
 
   void _showQueuedParty(OptimisticMutationResult result) {
     final remaining = result.undoUntil.difference(DateTime.now().toUtc());
-    Get.snackbar(
-      'Party saved on this phone',
-      '${_name.text.trim()} is ready for entries and will sync automatically.',
+    AppSnackbar.success(
+      title: 'Party saved on this phone',
+      message:
+          '${_name.text.trim()} is ready for entries and will sync automatically.',
       duration: remaining.isNegative ? const Duration(seconds: 1) : remaining,
-      snackPosition: SnackPosition.BOTTOM,
-      mainButton: remaining.isNegative
+      position: SnackbarPosition.bottom,
+      actionLabel: remaining.isNegative ? null : 'Undo',
+      onAction: remaining.isNegative
           ? null
-          : TextButton(
-              onPressed: () async {
-                Get.closeCurrentSnackbar();
-                final outcome = await _ledger.undoPending(result.operationId);
-                Get.snackbar(
-                  outcome == UndoPendingResult.undone
-                      ? 'Party addition undone'
-                      : 'Party is already syncing',
-                  outcome == UndoPendingResult.undone
-                      ? 'The pending party was removed.'
-                      : 'A posted or uploading party is never removed silently.',
-                  snackPosition: SnackPosition.BOTTOM,
+          : () async {
+              final outcome = await _ledger.undoPending(result.operationId);
+              if (outcome == UndoPendingResult.undone) {
+                AppSnackbar.success(
+                  title: 'Party addition undone',
+                  message: 'The pending party was removed.',
+                  position: SnackbarPosition.bottom,
                 );
-              },
-              child: const Text('Undo'),
-            ),
+              } else {
+                AppSnackbar.warning(
+                  title: 'Party is already syncing',
+                  message:
+                      'A posted or uploading party is never removed silently.',
+                  position: SnackbarPosition.bottom,
+                );
+              }
+            },
     );
   }
 
@@ -590,12 +565,19 @@ class _AddPartyPageState extends State<AddPartyPage>
 
   void _showMessage(String message, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? context.colors.red : null,
-      ),
-    );
+    if (error) {
+      AppSnackbar.error(
+        title: 'Something went wrong',
+        message: message,
+        position: SnackbarPosition.bottom,
+      );
+    } else {
+      AppSnackbar.info(
+        title: 'Heads up',
+        message: message,
+        position: SnackbarPosition.bottom,
+      );
+    }
   }
 
   bool _isUuid(String? value) =>
@@ -603,187 +585,698 @@ class _AddPartyPageState extends State<AddPartyPage>
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return PopScope<Object?>(
       canPop: !_dirty || _leavingAfterSave,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) unawaited(_handleBackNavigation());
       },
       child: Scaffold(
-        appBar: AppBar(title: Text((_editing ? 'Edit party' : 'Add party').tr)),
-        body: SafeArea(
-          top: false,
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _choosingContact ? null : _chooseContact,
-                  icon: _choosingContact
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.contacts_outlined),
-                  label: Text(
-                    (_choosingContact
-                            ? 'Finding contacts…'
-                            : 'Find from contacts')
-                        .tr,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text(
-                          'or enter manually'.tr,
-                          style: TextStyle(color: context.colors.muted),
-                        ),
+        backgroundColor: colors.page,
+        appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text(
+            (_editing ? 'Edit party' : 'Add party').tr,
+            style: displayStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: colors.ink,
+              letterSpacing: -0.2,
+            ),
+          ),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Divider(height: 1, thickness: 1, color: colors.line),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  children: [
+                    ListenableBuilder(
+                      listenable: Listenable.merge([_name, _phone]),
+                      builder: (context, _) => _PartyPreviewCard(
+                        name: _name.text,
+                        phone: _phone.text,
+                        editing: _editing,
                       ),
-                      const Expanded(child: Divider()),
+                    ),
+                    if (!_editing) ...[
+                      const SizedBox(height: 18),
+                      const _PartySectionLabel(label: 'QUICK ADD'),
+                      const SizedBox(height: 8),
+                      _ContactImportCard(
+                        busy: _choosingContact,
+                        onTap: _choosingContact ? null : _chooseContact,
+                      ),
+                      const SizedBox(height: 14),
+                      const _OrDivider(label: 'or enter manually'),
                     ],
-                  ),
-                ),
-                TextFormField(
-                  controller: _name,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  maxLength: 100,
-                  decoration: InputDecoration(
-                    labelText: 'Name'.tr,
-                    hintText: 'Customer or supplier name'.tr,
-                    prefixIcon: const Icon(Icons.person_outline_rounded),
-                    counterText: '',
-                  ),
-                  validator: (value) => (value?.trim().length ?? 0) < 2
-                      ? 'Enter at least 2 characters'
-                      : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  maxLength: 30,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]')),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: 'Phone number (optional)'.tr,
-                    hintText: '98765 43210',
-                    prefixIcon: const Icon(Icons.phone_outlined),
-                    counterText: '',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: Text(
-                          'More details'.tr,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text('Short name, group, or notes'.tr),
-                        trailing: Icon(
-                          _advanced
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                        ),
-                        onTap: () {
-                          setState(() => _advanced = !_advanced);
-                          _markDirty();
-                        },
-                      ),
-                      if (_advanced)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 16),
-                          child: Column(
-                            children: [
-                              TextField(
-                                controller: _shortName,
-                                maxLength: 100,
-                                textCapitalization: TextCapitalization.words,
-                                decoration: const InputDecoration(
-                                  labelText: 'Short or shop name (optional)',
-                                  counterText: '',
+                    const SizedBox(height: 18),
+                    const _PartySectionLabel(label: 'PARTY DETAILS'),
+                    const SizedBox(height: 8),
+                    _PartySurfaceCard(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                        child: Column(
+                          children: [
+                            TextFormField(
+                              controller: _name,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              maxLength: 100,
+                              decoration: InputDecoration(
+                                labelText: 'Name'.tr,
+                                hintText: 'Customer or supplier name'.tr,
+                                prefixIcon: const Icon(
+                                  Icons.person_outline_rounded,
                                 ),
+                                counterText: '',
                               ),
-                              const SizedBox(height: 12),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              validator: (value) =>
+                                  (value?.trim().length ?? 0) < 2
+                                  ? 'Enter at least 2 characters'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _phone,
+                              keyboardType: TextInputType.phone,
+                              textInputAction: TextInputAction.done,
+                              maxLength: 30,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9+ ()-]'),
+                                ),
+                              ],
+                              decoration: InputDecoration(
+                                labelText: 'Phone number (optional)'.tr,
+                                hintText: '98765 43210',
+                                prefixIcon: const Icon(Icons.phone_outlined),
+                                counterText: '',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const _PartySectionLabel(label: 'OPTIONAL'),
+                    const SizedBox(height: 8),
+                    _PartySurfaceCard(
+                      children: [
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() => _advanced = !_advanced);
+                              _markDirty();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                14,
+                                14,
+                                10,
+                                14,
+                              ),
+                              child: Row(
                                 children: [
+                                  const _PartyIconBadge(
+                                    icon: Icons.tune_rounded,
+                                  ),
+                                  const SizedBox(width: 12),
                                   Expanded(
-                                    child: DropdownButtonFormField<String?>(
-                                      key: ValueKey(_groupId),
-                                      initialValue: _groupId,
-                                      decoration: InputDecoration(
-                                        labelText: 'Group (optional)'.tr,
-                                      ),
-                                      items: [
-                                        DropdownMenuItem<String?>(
-                                          child: Text('No group'.tr),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'More details'.tr,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                            color: colors.ink,
+                                          ),
                                         ),
-                                        ..._ledger.groups.map(
-                                          (group) => DropdownMenuItem<String?>(
-                                            value: group.id,
-                                            child: Text(group.name),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Short name, group, or notes'.tr,
+                                          style: TextStyle(
+                                            color: colors.muted,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ],
-                                      onChanged: (value) {
-                                        setState(() => _groupId = value);
-                                        _markDirty();
-                                      },
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  IconButton.filledTonal(
-                                    tooltip: 'Create group'.tr,
-                                    onPressed: _ledger.mutating.value
-                                        ? null
-                                        : _createGroup,
-                                    icon: const Icon(
-                                      Icons.create_new_folder_outlined,
+                                  AnimatedRotation(
+                                    turns: _advanced ? 0.5 : 0,
+                                    duration: const Duration(milliseconds: 200),
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      color: colors.muted,
                                     ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              TextField(
-                                controller: _notes,
-                                maxLength: 500,
-                                minLines: 2,
-                                maxLines: 4,
-                                decoration: const InputDecoration(
-                                  labelText: 'Notes (optional)',
-                                  counterText: '',
+                            ),
+                          ),
+                        ),
+                        AnimatedCrossFade(
+                          firstChild: const SizedBox(width: double.infinity),
+                          secondChild: Column(
+                            children: [
+                              Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: colors.line,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  14,
+                                  14,
+                                  14,
+                                  16,
+                                ),
+                                child: Column(
+                                  children: [
+                                    TextField(
+                                      controller: _shortName,
+                                      maxLength: 100,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            'Short or shop name (optional)'.tr,
+                                        prefixIcon: const Icon(
+                                          Icons.storefront_outlined,
+                                        ),
+                                        counterText: '',
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child:
+                                              DropdownButtonFormField<String?>(
+                                                key: ValueKey(_groupId),
+                                                initialValue: _groupId,
+                                                decoration: InputDecoration(
+                                                  labelText:
+                                                      'Group (optional)'.tr,
+                                                  prefixIcon: const Icon(
+                                                    Icons.folder_outlined,
+                                                  ),
+                                                ),
+                                                items: [
+                                                  DropdownMenuItem<String?>(
+                                                    child: Text('No group'.tr),
+                                                  ),
+                                                  ..._ledger.groups.map(
+                                                    (group) =>
+                                                        DropdownMenuItem<
+                                                          String?
+                                                        >(
+                                                          value: group.id,
+                                                          child: Text(
+                                                            group.name,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                ],
+                                                onChanged: (value) {
+                                                  setState(
+                                                    () => _groupId = value,
+                                                  );
+                                                  _markDirty();
+                                                },
+                                              ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                          ),
+                                          child: Obx(
+                                            () => IconButton.filledTonal(
+                                              tooltip: 'Create group'.tr,
+                                              style: IconButton.styleFrom(
+                                                backgroundColor:
+                                                    colors.greenSoft,
+                                                foregroundColor:
+                                                    colors.greenDark,
+                                              ),
+                                              onPressed: _ledger.mutating.value
+                                                  ? null
+                                                  : _createGroup,
+                                              icon: const Icon(
+                                                Icons
+                                                    .create_new_folder_outlined,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: _notes,
+                                      maxLength: 500,
+                                      minLines: 2,
+                                      maxLines: 4,
+                                      decoration: InputDecoration(
+                                        labelText: 'Notes (optional)'.tr,
+                                        alignLabelWithHint: true,
+                                        prefixIcon: const Padding(
+                                          padding: EdgeInsets.only(bottom: 36),
+                                          child: Icon(Icons.notes_outlined),
+                                        ),
+                                        counterText: '',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
+                          crossFadeState: _advanced
+                              ? CrossFadeState.showSecond
+                              : CrossFadeState.showFirst,
+                          duration: const Duration(milliseconds: 220),
+                          sizeCurve: Curves.easeOutCubic,
                         ),
-                    ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            ),
+            _PartySaveBar(editing: _editing, onSave: _save),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PartyPreviewCard extends StatelessWidget {
+  const _PartyPreviewCard({
+    required this.name,
+    required this.phone,
+    required this.editing,
+  });
+
+  final String name;
+  final String phone;
+  final bool editing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final trimmed = name.trim();
+    final displayName = trimmed.isEmpty
+        ? (editing ? 'Party details' : 'New party')
+        : trimmed;
+    final phoneLabel = phone.trim().isEmpty
+        ? 'Phone optional · add later anytime'
+        : formatPhoneForDisplay(phone.trim());
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colors.brand,
+            Color.lerp(colors.brand, colors.brandDeep, 0.55)!,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.brand.withValues(alpha: 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: colors.onBrand.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: colors.onBrand.withValues(alpha: 0.22)),
+            ),
+            child: Text(
+              initials(trimmed.isEmpty ? '?' : trimmed),
+              style: displayStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: colors.onBrand,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  editing ? 'Editing party' : 'Ready for your ledger',
+                  style: TextStyle(
+                    color: colors.onBrandFaint,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
                   ),
                 ),
-                const SizedBox(height: 22),
-                Obx(
-                  () => AsyncActionButton(
-                    busy: _ledger.mutating.value,
-                    onPressed: _save,
-                    label: (_editing ? 'Save changes' : 'Add party').tr,
+                const SizedBox(height: 4),
+                Text(
+                  displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: displayStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: colors.onBrand,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  phoneLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.onBrand.withValues(alpha: 0.82),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactImportCard extends StatelessWidget {
+  const _ContactImportCard({required this.busy, required this.onTap});
+
+  final bool busy;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return _PartySurfaceCard(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+            child: Row(
+              children: [
+                busy
+                    ? SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: Center(
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: colors.brand,
+                            ),
+                          ),
+                        ),
+                      )
+                    : const _PartyIconBadge(icon: Icons.contacts_outlined),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (busy ? 'Finding contacts…' : 'Find from contacts').tr,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: colors.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Pick a name and number from your phone',
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: colors.muted),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _OrDivider extends StatelessWidget {
+  const _OrDivider({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Row(
+      children: [
+        Expanded(child: Divider(color: colors.line, height: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label.tr,
+            style: TextStyle(
+              color: colors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: colors.line, height: 1)),
+      ],
+    );
+  }
+}
+
+class _PartySectionLabel extends StatelessWidget {
+  const _PartySectionLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(
+        color: context.colors.brand,
+        fontSize: 11.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.05,
+      ),
+    );
+  }
+}
+
+class _PartySurfaceCard extends StatelessWidget {
+  const _PartySurfaceCard({this.child, this.children});
+
+  final Widget? child;
+  final List<Widget>? children;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final radius = BorderRadius.circular(16);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child ?? Column(children: children ?? const []),
+      ),
+    );
+  }
+}
+
+class _PartyIconBadge extends StatelessWidget {
+  const _PartyIconBadge({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: 42,
+      height: 42,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.greenSoft,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: colors.greenDark, size: 21),
+    );
+  }
+}
+
+class _PartySaveBar extends StatelessWidget {
+  const _PartySaveBar({required this.editing, required this.onSave});
+
+  final bool editing;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final ledger = Get.find<LedgerController>();
+    return Material(
+      color: colors.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.line)),
+          boxShadow: [
+            BoxShadow(
+              color: colors.ink.withValues(alpha: 0.05),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Obx(
+              () => AsyncActionButton(
+                busy: ledger.mutating.value,
+                onPressed: onSave,
+                icon: editing
+                    ? Icons.check_rounded
+                    : Icons.person_add_alt_1_rounded,
+                label: (editing ? 'Save changes' : 'Add party').tr,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Owns its [TextEditingController] for the dialog route lifetime so the
+/// controller is not disposed while the IME / input decorator is still
+/// animating closed.
+class _CreateGroupDialog extends StatefulWidget {
+  const _CreateGroupDialog();
+
+  @override
+  State<_CreateGroupDialog> createState() => _CreateGroupDialogState();
+}
+
+class _CreateGroupDialogState extends State<_CreateGroupDialog> {
+  final _name = TextEditingController();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _close([String? result]) {
+    FocusScope.of(context).unfocus();
+    Navigator.pop(context, result);
+  }
+
+  void _submit() {
+    final trimmed = _name.text.trim();
+    if (trimmed.length < 2) return;
+    _close(trimmed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return AlertDialog(
+      backgroundColor: colors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Text(
+        'Create a party group'.tr,
+        style: displayStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: colors.ink,
+          letterSpacing: -0.2,
+        ),
+      ),
+      content: TextField(
+        controller: _name,
+        autofocus: true,
+        maxLength: 80,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        decoration: InputDecoration(
+          labelText: 'Group name'.tr,
+          hintText: 'For example: Wholesale'.tr,
+          prefixIcon: const Icon(Icons.folder_outlined),
+          counterText: '',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(onPressed: _close, child: Text('Cancel'.tr)),
+        FilledButton(onPressed: _submit, child: Text('Create group'.tr)),
+      ],
     );
   }
 }
@@ -820,106 +1313,143 @@ class _ContactDirectorySheetState extends State<_ContactDirectorySheet> {
     final other = _matching(widget.directory.other);
     final noMatches = inLedger.isEmpty && onHisaab.isEmpty && other.isEmpty;
 
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.88,
-      minChildSize: 0.55,
-      maxChildSize: 0.96,
-      builder: (context, scrollController) => CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-            sliver: SliverList.list(
-              children: [
-                Text(
-                  'Choose a contact'.tr,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Manual entry remains available if you do not want to use contacts.',
-                  style: TextStyle(color: context.colors.muted),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  autofocus: true,
-                  textInputAction: TextInputAction.search,
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: InputDecoration(
-                    hintText: 'Search name or phone'.tr,
-                    prefixIcon: const Icon(Icons.search_rounded),
-                  ),
-                ),
-                if (!widget.directory.hisaabMatchingAvailable) ...[
-                  const SizedBox(height: 12),
-                  const _ContactPrivacyNotice(
-                    message:
-                        'Hisaab account matching is not available right now. '
-                        'Contacts already saved in this ledger are still '
-                        'identified on-device.',
-                  ),
-                ] else if (widget.directory.discoveryTruncated) ...[
-                  const SizedBox(height: 12),
-                  _ContactPrivacyNotice(
-                    message:
-                        'Checked the first '
-                        '${widget.directory.discoveryCheckedCount} valid '
-                        'numbers for Hisaab accounts. Your complete local '
-                        'contact list is still shown below.',
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (inLedger.isNotEmpty)
-            _ContactSection(
-              title: 'Already in your ledger'.tr,
-              contacts: inLedger,
-            ),
-          if (onHisaab.isNotEmpty)
-            _ContactSection(title: 'On Hisaab'.tr, contacts: onHisaab),
-          if (other.isNotEmpty)
-            _ContactSection(title: 'Other contacts'.tr, contacts: other),
-          if (noMatches)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person_search_outlined,
-                        size: 42,
-                        color: context.colors.muted,
+    return Material(
+      color: context.colors.page,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.88,
+        minChildSize: 0.55,
+        maxChildSize: 0.96,
+        builder: (context, scrollController) {
+          final colors = context.colors;
+          return CustomScrollView(
+            controller: scrollController,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                sliver: SliverList.list(
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colors.line,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Choose a contact'.tr,
+                      style: displayStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: colors.ink,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Manual entry remains available if you do not want to use contacts.',
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      onChanged: (value) => setState(() => _query = value),
+                      decoration: InputDecoration(
+                        hintText: 'Search name or phone'.tr,
+                        prefixIcon: const Icon(Icons.search_rounded),
+                      ),
+                    ),
+                    if (!widget.directory.hisaabMatchingAvailable) ...[
                       const SizedBox(height: 12),
-                      Text(
-                        _query.trim().isEmpty
-                            ? 'No contacts with phone numbers found'
-                            : 'No matching contacts',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                      const _ContactPrivacyNotice(
+                        message:
+                            'Hisaab account matching is not available right now. '
+                            'Contacts already saved in this ledger are still '
+                            'identified on-device.',
+                      ),
+                    ] else if (widget.directory.discoveryTruncated) ...[
+                      const SizedBox(height: 12),
+                      _ContactPrivacyNotice(
+                        message:
+                            'Checked the first '
+                            '${widget.directory.discoveryCheckedCount} valid '
+                            'numbers for Hisaab accounts. Your complete local '
+                            'contact list is still shown below.',
                       ),
                     ],
+                  ],
+                ),
+              ),
+              if (inLedger.isNotEmpty)
+                _ContactSection(
+                  title: 'Already in your ledger'.tr,
+                  contacts: inLedger,
+                ),
+              if (onHisaab.isNotEmpty)
+                _ContactSection(title: 'On Hisaab'.tr, contacts: onHisaab),
+              if (other.isNotEmpty)
+                _ContactSection(title: 'Other contacts'.tr, contacts: other),
+              if (noMatches)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: colors.settledSoft,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Icon(
+                              Icons.person_search_outlined,
+                              size: 30,
+                              color: colors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            _query.trim().isEmpty
+                                ? 'No contacts with phone numbers found'
+                                : 'No matching contacts',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                sliver: SliverToBoxAdapter(
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: Text('Enter manually instead'.tr),
                   ),
                 ),
               ),
-            ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            sliver: SliverToBoxAdapter(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.edit_outlined),
-                label: Text('Enter manually instead'.tr),
-              ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

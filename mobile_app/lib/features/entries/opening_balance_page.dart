@@ -7,6 +7,7 @@ import '../../core/network/api_failure.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/models/models.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/async_action_button.dart';
 import '../../shared/widgets/balance_widgets.dart';
 import '../ledger/ledger_controller.dart';
@@ -84,10 +85,10 @@ class _OpeningBalancePageState extends State<OpeningBalancePage> {
       );
       if (!mounted) return;
       Navigator.pop(context, true);
-      Get.snackbar(
-        'Opening balance saved',
-        'The party statement has been updated.',
-        snackPosition: SnackPosition.BOTTOM,
+      AppSnackbar.success(
+        title: 'Opening balance saved',
+        message: 'The party statement has been updated.',
+        position: SnackbarPosition.bottom,
       );
     } on ApiFailure catch (error) {
       if (!mounted) return;

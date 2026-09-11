@@ -13,6 +13,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/repositories/ledger_repository.dart';
 import '../../services/contact_discovery_consent_service.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/async_action_button.dart';
 import '../auth/auth_controller.dart';
 import '../learn/learn_page.dart';
@@ -130,16 +131,17 @@ class MorePage extends StatelessWidget {
                         : () async {
                             try {
                               await ledger.reload();
-                              Get.snackbar(
-                                'Up to date',
-                                'The latest Hisaab is now on this phone.',
-                                snackPosition: SnackPosition.BOTTOM,
+                              AppSnackbar.success(
+                                title: 'Up to date',
+                                message:
+                                    'The latest Hisaab is now on this phone.',
+                                position: SnackbarPosition.bottom,
                               );
                             } on ApiFailure catch (error) {
-                              Get.snackbar(
-                                'Could not refresh',
-                                error.message,
-                                snackPosition: SnackPosition.BOTTOM,
+                              AppSnackbar.error(
+                                title: 'Could not refresh',
+                                message: error.message,
+                                position: SnackbarPosition.bottom,
                               );
                             }
                           },
@@ -185,9 +187,7 @@ class MorePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    ServerMode.parse(
-                              Get.find<AppStorage>().readServerMode(),
-                            ) ==
+                    ServerMode.parse(Get.find<AppStorage>().readServerMode()) ==
                             ServerMode.selfHosted
                         ? 'Self-hosted'
                         : 'Hisaab Cloud',
@@ -259,9 +259,7 @@ class MorePage extends StatelessWidget {
           ),
           FilledButton(
             style: unsynced > 0
-                ? FilledButton.styleFrom(
-                    backgroundColor: context.colors.red,
-                  )
+                ? FilledButton.styleFrom(backgroundColor: context.colors.red)
                 : null,
             onPressed: () => Navigator.pop(context, true),
             child: Text(
@@ -333,14 +331,18 @@ class _SettingsPageState extends State<SettingsPage> {
       _saveIdempotencyKey = const Uuid().v4();
       _saveAttempted = false;
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Settings saved'.tr)));
+      AppSnackbar.success(
+        title: 'Settings saved'.tr,
+        message: 'Your preferences are up to date.',
+        position: SnackbarPosition.bottom,
+      );
     } on ApiFailure catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not save',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     }
   }
 
@@ -365,20 +367,20 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await _contactConsent.setGranted(value);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            value
-                ? 'Hisaab contact matching is on.'
-                : 'Hisaab contact matching is off.',
-          ),
-        ),
+      AppSnackbar.success(
+        title: value ? 'Contact matching on' : 'Contact matching off',
+        message: value
+            ? 'Hisaab contact matching is on.'
+            : 'Hisaab contact matching is off.',
+        position: SnackbarPosition.bottom,
       );
     } catch (_) {
       if (!mounted) return;
       setState(() => _contactDiscovery = previous);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not save the privacy setting.')),
+      AppSnackbar.error(
+        title: 'Could not save',
+        message: 'Could not save the privacy setting.',
+        position: SnackbarPosition.bottom,
       );
     }
   }
@@ -394,21 +396,21 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       _operationKeys.remove(intent);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            value
-                ? 'People who have your number can now find you on Hisaab.'
-                : 'People can no longer find your Hisaab account by number.',
-          ),
-        ),
+      AppSnackbar.success(
+        title: value ? 'Discoverable' : 'Hidden',
+        message: value
+            ? 'People who have your number can now find you on Hisaab.'
+            : 'People can no longer find your Hisaab account by number.',
+        position: SnackbarPosition.bottom,
       );
     } on ApiFailure catch (error) {
       if (!mounted) return;
       setState(() => _contactDiscoverable = previous);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not save',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     }
   }
 
@@ -429,9 +431,11 @@ class _SettingsPageState extends State<SettingsPage> {
     } on ApiFailure catch (error) {
       if (!mounted) return;
       setState(() => _language = previous);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not update language',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     }
   }
 
@@ -467,9 +471,11 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     } on ApiFailure catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not export',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -541,16 +547,18 @@ class _SettingsPageState extends State<SettingsPage> {
     } on ApiFailure catch (error) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      AppSnackbar.error(
+        title: 'Could not delete account',
+        message: error.message,
+        position: SnackbarPosition.bottom,
+      );
     } catch (_) {
       if (!mounted) return;
       setState(() => _deleting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('The account could not be deleted. Try again.'),
-        ),
+      AppSnackbar.error(
+        title: 'Could not delete account',
+        message: 'The account could not be deleted. Try again.',
+        position: SnackbarPosition.bottom,
       );
     }
   }
@@ -558,180 +566,307 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final sectionStyle = Theme.of(context).textTheme.titleLarge;
     return Scaffold(
-      appBar: AppBar(title: Text('Settings'.tr)),
+      backgroundColor: colors.page,
+      appBar: AppBar(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          'Settings'.tr,
+          style: displayStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: colors.ink,
+            letterSpacing: -0.2,
+          ),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, thickness: 1, color: colors.line),
+        ),
+      ),
       body: SafeArea(
         top: false,
         child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
             children: [
-              Text('Business'.tr, style: sectionStyle),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _company,
-                maxLength: 100,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  labelText: 'Business or ledger name'.tr,
-                  counterText: '',
-                  prefixIcon: const Icon(Icons.storefront_outlined),
-                ),
-                validator: (value) => (value?.trim().length ?? 0) < 2
-                    ? 'Enter at least 2 characters'
-                    : null,
-              ),
-              const SizedBox(height: 22),
-              Text('Reading comfort'.tr, style: sectionStyle),
-              const SizedBox(height: 10),
-              Card(
-                child: SwitchListTile(
-                  value: _accessibilityMode,
-                  onChanged: (value) {
-                    setState(() => _accessibilityMode = value);
-                    _settingsIntentChanged();
-                  },
-                  title: Text(
-                    'Larger, clearer controls'.tr,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+              const _SettingsSectionLabel(label: 'BUSINESS'),
+              const SizedBox(height: 8),
+              _SettingsCard(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+                  child: TextFormField(
+                    controller: _company,
+                    maxLength: 100,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      labelText: 'Business or ledger name'.tr,
+                      hintText: 'e.g. Sharma Traders',
+                      counterText: '',
+                      prefixIcon: const Icon(Icons.storefront_outlined),
+                    ),
+                    validator: (value) => (value?.trim().length ?? 0) < 2
+                        ? 'Enter at least 2 characters'
+                        : null,
                   ),
-                  subtitle: const Text(
-                    'Remember this preference across Hisaab devices.',
-                  ),
-                  secondary: const Icon(Icons.accessibility_new_rounded),
                 ),
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _language,
-                decoration: InputDecoration(
-                  labelText: 'App language'.tr,
-                  prefixIcon: const Icon(Icons.translate_rounded),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'en', child: Text('English')),
-                  DropdownMenuItem(value: 'hi', child: Text('हिन्दी')),
+              const SizedBox(height: 18),
+              const _SettingsSectionLabel(label: 'READING COMFORT'),
+              const SizedBox(height: 8),
+              _SettingsCard(
+                children: [
+                  SwitchListTile(
+                    value: _accessibilityMode,
+                    onChanged: (value) {
+                      setState(() => _accessibilityMode = value);
+                      _settingsIntentChanged();
+                    },
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    title: Text(
+                      'Larger, clearer controls'.tr,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: colors.ink,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Remember this preference across Hisaab devices.',
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    secondary: _SettingsIcon(
+                      icon: Icons.accessibility_new_rounded,
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: colors.line),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _language,
+                      decoration: InputDecoration(
+                        labelText: 'App language'.tr,
+                        prefixIcon: const Icon(Icons.translate_rounded),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'en', child: Text('English')),
+                        DropdownMenuItem(value: 'hi', child: Text('हिन्दी')),
+                      ],
+                      onChanged: _ledger.mutating.value ? null : _setLanguage,
+                    ),
+                  ),
                 ],
-                onChanged: _ledger.mutating.value ? null : _setLanguage,
               ),
-              const SizedBox(height: 22),
-              Text('Privacy'.tr, style: sectionStyle),
-              const SizedBox(height: 10),
-              Card(
-                child: Column(
-                  children: [
-                    SwitchListTile(
-                      value: _contactDiscovery,
-                      onChanged: _loadingContactConsent
-                          ? null
-                          : _setContactDiscovery,
-                      title: Text(
-                        'Find contacts on Hisaab'.tr,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: const Text(
-                        'Send valid normalized phone numbers for account '
-                        'matching. Contact names stay on this phone.',
-                      ),
-                      secondary: _loadingContactConsent
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.contacts_outlined),
+              const SizedBox(height: 18),
+              const _SettingsSectionLabel(label: 'PRIVACY'),
+              const SizedBox(height: 8),
+              _SettingsCard(
+                children: [
+                  SwitchListTile(
+                    value: _contactDiscovery,
+                    onChanged: _loadingContactConsent
+                        ? null
+                        : _setContactDiscovery,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
                     ),
-                    const Divider(height: 1),
-                    SwitchListTile(
-                      value: _contactDiscoverable,
-                      onChanged: _ledger.mutating.value
-                          ? null
-                          : _setContactDiscoverable,
-                      title: Text(
-                        'Allow people with my number to find me'.tr,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                    title: Text(
+                      'Find contacts on Hisaab'.tr,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: colors.ink,
                       ),
-                      subtitle: const Text(
-                        'This controls whether other Hisaab users who already '
-                        'have your number can see that you use Hisaab.',
-                      ),
-                      secondary: const Icon(Icons.person_search_outlined),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text('Data and recovery'.tr, style: sectionStyle),
-              const SizedBox(height: 10),
-              Card(
-                child: Column(
-                  children: [
-                    Builder(
-                      builder: (shareContext) => ListTile(
-                        leading: _exporting
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
+                    subtitle: Text(
+                      'Send valid normalized phone numbers for account '
+                      'matching. Contact names stay on this phone.',
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
+                      ),
+                    ),
+                    secondary: _loadingContactConsent
+                        ? SizedBox(
+                            width: 38,
+                            height: 38,
+                            child: Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
+                                  color: colors.brand,
                                 ),
-                              )
-                            : const Icon(Icons.download_outlined),
-                        title: Text(
-                          'Export a backup'.tr,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          'Share a complete server copy as JSON or CSV.'.tr,
-                        ),
-                        trailing: PopupMenuButton<LedgerExportFormat>(
-                          tooltip: 'Choose export format'.tr,
-                          enabled: !_exporting && !_deleting,
-                          onSelected: (format) => _export(format, shareContext),
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: LedgerExportFormat.json,
-                              child: Text('JSON backup'.tr),
+                              ),
                             ),
-                            PopupMenuItem(
-                              value: LedgerExportFormat.csv,
-                              child: Text('CSV entries'.tr),
-                            ),
-                          ],
-                        ),
+                          )
+                        : const _SettingsIcon(icon: Icons.contacts_outlined),
+                  ),
+                  Divider(height: 1, thickness: 1, color: colors.line),
+                  SwitchListTile(
+                    value: _contactDiscoverable,
+                    onChanged: _ledger.mutating.value
+                        ? null
+                        : _setContactDiscoverable,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    title: Text(
+                      'Allow people with my number to find me'.tr,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: colors.ink,
                       ),
                     ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: Icon(
-                        Icons.delete_forever_outlined,
-                        color: colors.red,
+                    subtitle: Text(
+                      'This controls whether other Hisaab users who already '
+                      'have your number can see that you use Hisaab.',
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        height: 1.35,
                       ),
+                    ),
+                    secondary: const _SettingsIcon(
+                      icon: Icons.person_search_outlined,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const _SettingsSectionLabel(label: 'DATA AND RECOVERY'),
+              const SizedBox(height: 8),
+              _SettingsCard(
+                children: [
+                  Builder(
+                    builder: (shareContext) => ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
+                      leading: _exporting
+                          ? SizedBox(
+                              width: 38,
+                              height: 38,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colors.brand,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const _SettingsIcon(icon: Icons.download_outlined),
                       title: Text(
-                        'Delete account and ledger'.tr,
+                        'Export a backup'.tr,
                         style: TextStyle(
-                          color: colors.red,
                           fontWeight: FontWeight.w700,
+                          color: colors.ink,
                         ),
                       ),
                       subtitle: Text(
-                        'Permanently removes all company data.'.tr,
+                        'Share a complete server copy as JSON or CSV.'.tr,
+                        style: TextStyle(
+                          color: colors.muted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                      trailing: _deleting
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.chevron_right_rounded),
-                      onTap: _exporting || _deleting
-                          ? null
-                          : _confirmDeleteAccount,
+                      trailing: PopupMenuButton<LedgerExportFormat>(
+                        tooltip: 'Choose export format'.tr,
+                        enabled: !_exporting && !_deleting,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        onSelected: (format) => _export(format, shareContext),
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: LedgerExportFormat.json,
+                            child: Text('JSON backup'.tr),
+                          ),
+                          PopupMenuItem(
+                            value: LedgerExportFormat.csv,
+                            child: Text('CSV entries'.tr),
+                          ),
+                        ],
+                        child: Icon(
+                          Icons.more_vert_rounded,
+                          color: colors.muted,
+                        ),
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: colors.line),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.redSoft,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Icon(
+                        Icons.delete_forever_outlined,
+                        color: colors.red,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Delete account and ledger'.tr,
+                      style: TextStyle(
+                        color: colors.red,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Permanently removes all company data.'.tr,
+                      style: TextStyle(
+                        color: colors.muted,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    trailing: _deleting
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.red,
+                            ),
+                          )
+                        : Icon(
+                            Icons.chevron_right_rounded,
+                            color: colors.muted,
+                          ),
+                    onTap: _exporting || _deleting
+                        ? null
+                        : _confirmDeleteAccount,
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               Obx(
@@ -745,6 +880,80 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SettingsSectionLabel extends StatelessWidget {
+  const _SettingsSectionLabel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: TextStyle(
+        color: context.colors.brand,
+        fontSize: 11.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.05,
+      ),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({this.child, this.children});
+
+  final Widget? child;
+  final List<Widget>? children;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final radius = BorderRadius.circular(16);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: child ?? Column(children: children ?? const []),
+      ),
+    );
+  }
+}
+
+class _SettingsIcon extends StatelessWidget {
+  const _SettingsIcon({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      width: 38,
+      height: 38,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.greenSoft,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Icon(icon, color: colors.greenDark, size: 20),
     );
   }
 }

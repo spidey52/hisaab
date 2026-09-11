@@ -1425,7 +1425,11 @@ class LedgerRepository {
             .where((entry) => entry.id == localId)
             .firstOrNull;
         final canonicalEntry = rawEntry.isNotEmpty
-            ? LedgerEntry.fromJson(rawEntry)
+            ? _preserveEntryTimestamps(
+                current.entries,
+                LedgerEntry.fromJson(rawEntry),
+                localClientId: localId,
+              )
             : local?.copyWith(
                 sequence: _integer(response['sequence']) ?? local.sequence,
                 localSyncStatus: LocalSyncStatus.synced,
@@ -1630,7 +1634,8 @@ class LedgerRepository {
     var updated = current;
     final rawEntry = _map(response['entry']);
     if (rawEntry.isNotEmpty) {
-      final entry = LedgerEntry.fromJson(rawEntry);
+      var entry = LedgerEntry.fromJson(rawEntry);
+      entry = _preserveEntryTimestamps(current.entries, entry);
       updated = updated.copyWith(
         entries: _replaceById(updated.entries, entry, (item) => item.id),
       );
@@ -1777,6 +1782,39 @@ class LedgerRepository {
       // Diagnostics are best-effort during very early initialization only.
     }
   }
+
+  /// Keeps a locally known create/update time when the API omits timestamps
+  /// (parsed as epoch), so the UI can show "just now" instead of midnight.
+  LedgerEntry _preserveEntryTimestamps(
+    List<LedgerEntry> existing,
+    LedgerEntry incoming, {
+    String? localClientId,
+  }) {
+    final prior = existing
+        .where(
+          (entry) =>
+              entry.id == incoming.id ||
+              (localClientId != null &&
+                  localClientId.isNotEmpty &&
+                  entry.id == localClientId),
+        )
+        .firstOrNull;
+    if (prior == null) return incoming;
+
+    final keepCreated =
+        !_hasRealTimestamp(incoming.createdAt) &&
+        _hasRealTimestamp(prior.createdAt);
+    final keepUpdated =
+        incoming.updatedAt == null && prior.updatedAt != null;
+    if (!keepCreated && !keepUpdated) return incoming;
+    return incoming.copyWith(
+      createdAt: keepCreated ? prior.createdAt : null,
+      updatedAt: keepUpdated ? prior.updatedAt : null,
+    );
+  }
+
+  bool _hasRealTimestamp(DateTime value) =>
+      value.millisecondsSinceEpoch > 0 && value.year >= 1971;
 }
 
 class OptimisticMutationResult {

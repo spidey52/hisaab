@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../../app/app.dart';
 import '../../data/models/models.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/direction_action_button.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/entry_detail_sheet.dart';
@@ -98,10 +99,10 @@ class EntriesPage extends GetView<LedgerController> {
 
   void _add(EntryAction action) {
     if (controller.parties.where((party) => !party.isArchived).isEmpty) {
-      Get.snackbar(
-        'First, add a party',
-        'An entry needs a customer or supplier. Add one now.',
-        snackPosition: SnackPosition.BOTTOM,
+      AppSnackbar.warning(
+        title: 'First, add a party',
+        message: 'An entry needs a customer or supplier. Add one now.',
+        position: SnackbarPosition.bottom,
       );
       Get.toNamed(AppRoutes.addParty);
       return;

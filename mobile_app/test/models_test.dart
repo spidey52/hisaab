@@ -93,6 +93,19 @@ void main() {
       expect(entry.cancelledAt, DateTime.utc(2026, 7, 31, 9, 15));
       expect(entry.entryDate, DateTime(2026, 7, 30));
     });
+
+    test('parses Node Date.toString timestamps used by older API payloads', () {
+      final entry = LedgerEntry.fromJson({
+        ..._entryJson(),
+        'createdAt':
+            'Thu Sep 10 2026 08:17:53 GMT+0000 (Coordinated Universal Time)',
+        'updatedAt':
+            'Thu Sep 10 2026 08:17:53 GMT+0000 (Coordinated Universal Time)',
+      });
+
+      expect(entry.createdAt, DateTime.utc(2026, 9, 10, 8, 17, 53));
+      expect(entry.updatedAt, DateTime.utc(2026, 9, 10, 8, 17, 53));
+    });
   });
 
   group('BootstrapData.fromJson', () {

@@ -69,24 +69,26 @@ class HisaabColors extends ThemeExtension<HisaabColors> {
   final Color heroBottom;
 
   static const light = HisaabColors(
-    page: Color(0xFFF8F5EE),
+    // Cool white/slate surfaces to match the redesigned shell screenshots.
+    // Brand greens (brand / brandDeep / onBrand* / hero*) stay unchanged.
+    page: Color(0xFFF7F8F9),
     surface: Color(0xFFFFFFFF),
     surfaceRaised: Color(0xFFFFFFFF),
-    ink: Color(0xFF1C241F),
-    muted: Color(0xFF5F6A63),
-    line: Color(0xFFE6E1D3),
+    ink: Color(0xFF1F2937),
+    muted: Color(0xFF6B7280),
+    line: Color(0xFFE5E7EB),
     brand: Color(0xFF0A5C3C),
     brandDeep: Color(0xFF07402A),
     onBrand: Color(0xFFF6FBF5),
     onBrandFaint: Color(0xFFBBD9C6),
-    green: Color(0xFF0A6C44),
-    greenDark: Color(0xFF085534),
-    greenSoft: Color(0xFFE4F0E5),
-    red: Color(0xFFAE3E2C),
-    redSoft: Color(0xFFF8ECE6),
+    green: Color(0xFF15803D),
+    greenDark: Color(0xFF166534),
+    greenSoft: Color(0xFFDCFCE7),
+    red: Color(0xFFDC2626),
+    redSoft: Color(0xFFFEE2E2),
     amber: Color(0xFFB06F12),
     amberSoft: Color(0xFFFAF0DD),
-    settledSoft: Color(0xFFEFECE2),
+    settledSoft: Color(0xFFF3F4F6),
     heroTop: Color(0xFF0E6B45),
     heroBottom: Color(0xFF073B26),
   );
@@ -172,6 +174,18 @@ abstract final class AppTheme {
   static ThemeData get light => _build(HisaabColors.light, Brightness.light);
 
   static ThemeData get dark => _build(HisaabColors.dark, Brightness.dark);
+
+  /// Larger Material text styles when the user enables accessibility mode.
+  /// Applied on [GetMaterialApp.theme] — never via a nested MediaQuery/Theme
+  /// in [GetMaterialApp.builder], which races with the IME.
+  static ThemeData withAccessibility(ThemeData theme, bool enabled) {
+    if (!enabled) return theme;
+    const factor = 1.15;
+    return theme.copyWith(
+      textTheme: theme.textTheme.apply(fontSizeFactor: factor),
+      primaryTextTheme: theme.primaryTextTheme.apply(fontSizeFactor: factor),
+    );
+  }
 
   static ThemeData _build(HisaabColors c, Brightness brightness) {
     final isDark = brightness == Brightness.dark;

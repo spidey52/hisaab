@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../app/app.dart';
+import '../../app/modules/entries/widget/entries_list_row.dart';
+import '../../app/modules/shared/widget/ledger_activity_row.dart';
 import '../../core/network/api_failure.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
@@ -13,9 +16,10 @@ import '../../data/models/models.dart';
 import '../../data/models/statement_models.dart';
 import '../../services/party_communication_service.dart';
 import '../../shared/widgets/balance_widgets.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/direction_action_button.dart';
 import '../../shared/widgets/empty_state.dart';
-import '../../shared/widgets/entry_tile.dart';
+import '../../shared/widgets/entry_detail_sheet.dart';
 import '../ledger/ledger_controller.dart';
 
 class PartyDetailPage extends StatefulWidget {
@@ -51,6 +55,11 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
   int _requestVersion = 0;
   final Map<String, String> _operationKeys = {};
 
+  /// Local entry ids shown optimistically until the remote statement includes them.
+  final Set<String> _pinnedOverlayIds = {};
+  Worker? _syncWorker;
+  LedgerSyncStatus? _lastSyncStatus;
+
   @override
   void initState() {
     super.initState();
@@ -59,15 +68,28 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
         ? arguments['partyId']?.toString() ?? ''
         : arguments?.toString() ?? '';
     _scrollController.addListener(_onScroll);
+    _lastSyncStatus = _ledger.syncStatus.value;
+    _syncWorker = ever(_ledger.syncStatus, _onSyncStatusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadStatement());
   }
 
   @override
   void dispose() {
+    _syncWorker?.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
+  }
+
+  void _onSyncStatusChanged(LedgerSyncStatus status) {
+    final wasSyncing = _lastSyncStatus == LedgerSyncStatus.syncing;
+    _lastSyncStatus = status;
+    if (!mounted || !wasSyncing) return;
+    if (status == LedgerSyncStatus.idle ||
+        status == LedgerSyncStatus.waitingToRetry) {
+      unawaited(_loadStatement(silent: true));
+    }
   }
 
   void _onScroll() {
@@ -90,9 +112,9 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
     };
   }
 
-  Future<void> _loadStatement() async {
+  Future<void> _loadStatement({bool silent = false}) async {
     final request = ++_requestVersion;
-    if (mounted) {
+    if (mounted && !silent) {
       setState(() {
         _loading = true;
         _statementError = null;
@@ -116,9 +138,17 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
         _hasMore = page.hasMore;
         _usingLocalFallback = false;
         _loading = false;
+        _statementError = null;
+        _pinnedOverlayIds.removeWhere(
+          (id) => page.entries.any((item) => item.entry.id == id),
+        );
       });
     } on ApiFailure catch (error) {
       if (!mounted || request != _requestVersion) return;
+      if (silent && _firstPage != null) {
+        // Keep the last good remote page; overlay still covers optimistic rows.
+        return;
+      }
       setState(() {
         _firstPage = null;
         _remoteEntries.clear();
@@ -129,6 +159,31 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _openAddEntry({
+    required EntryAction action,
+    required String partyId,
+    int? amountPaise,
+  }) async {
+    final result = await Get.toNamed(
+      AppRoutes.addEntry,
+      arguments: {
+        'action': action,
+        'partyId': partyId,
+        'amountPaise': ?amountPaise,
+      },
+    );
+    if (!mounted) return;
+    if (result == true) await _loadStatement();
+  }
+
+  Future<void> _openOpeningBalance(Party party) async {
+    await Get.toNamed(
+      AppRoutes.openingBalance,
+      arguments: {'partyId': party.id},
+    );
+    if (mounted) await _loadStatement();
   }
 
   Future<void> _loadMore() async {
@@ -229,6 +284,30 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       setState(() => _period = selected);
     }
     await _loadStatement();
+  }
+
+  Future<void> _showPartyOptions(Party party) async {
+    final canMerge =
+        !party.isArchived &&
+        party.localSyncStatus == LocalSyncStatus.synced &&
+        _mergeCandidates(party).isNotEmpty;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) =>
+          _PartyOptionsSheet(party: party, canMerge: canMerge),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'edit':
+        await Get.toNamed(AppRoutes.addParty, arguments: {'partyId': party.id});
+      case 'opening':
+        await _openOpeningBalance(party);
+      case 'archive':
+        await _archive(party);
+      case 'merge':
+        await _mergeParty(party);
+    }
   }
 
   Future<void> _call(Party party) async {
@@ -443,99 +522,13 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
   }
 
   Future<void> _openEntry(LedgerEntry entry) async {
-    final pending = entry.localSyncStatus != LocalSyncStatus.synced;
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              EntryTile(
-                entry: entry,
-                showPartyName: false,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-              const Divider(height: 24),
-              _DetailRow('Date', formatShortDate(entry.entryDate)),
-              if (entry.sequence > 0)
-                _DetailRow('Entry number', '${entry.sequence}'),
-              if (pending) const _DetailRow('Status', 'Pending sync'),
-              if (entry.narration.trim().isNotEmpty)
-                _DetailRow('Note', entry.narration.trim()),
-              if (entry.paymentAccount != null)
-                _DetailRow(
-                  'Account',
-                  entry.paymentAccount == 'bank' ? 'Bank' : 'Cash',
-                ),
-              if (!pending &&
-                  entry.status == EntryStatus.posted &&
-                  !entry.isOpeningBalance) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context, 'edit'),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: Text('Edit entry'.tr),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context, 'cancel'),
-                  icon: const Icon(Icons.block_outlined),
-                  label: const Text('Cancel this entry'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
+    await showEntryDetailSheet(
+      context,
+      entry,
+      titleOverride: _entryTitle(entry),
+      useDirectionAvatar: true,
+      onChanged: _loadStatement,
     );
-    if (!mounted) return;
-    if (action == 'edit') {
-      await Get.toNamed(AppRoutes.addEntry, arguments: {'entryId': entry.id});
-    } else if (action == 'cancel') {
-      await _confirmCancel(entry);
-    }
-  }
-
-  Future<void> _confirmCancel(LedgerEntry entry) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this entry?'),
-        content: const Text(
-          'Its amount will stop affecting the balance. The cancelled entry '
-          'will remain visible for a clear history.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep entry'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: context.colors.red,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel entry'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      final intent = 'cancel:${entry.id}';
-      await _ledger.cancelEntry(
-        entry.id,
-        idempotencyKey: _operationKey(intent),
-      );
-      _operationKeys.remove(intent);
-      await _loadStatement();
-    } on ApiFailure catch (error) {
-      _message(error.message);
-    }
   }
 
   Future<void> _archive(Party party) async {
@@ -647,10 +640,10 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       _operationKeys.remove(intent);
       if (!mounted) return;
       Get.offNamed(AppRoutes.party, arguments: {'partyId': target.id});
-      Get.snackbar(
-        'Parties merged',
-        'All entries are now under ${target.name}.',
-        snackPosition: SnackPosition.BOTTOM,
+      AppSnackbar.success(
+        title: 'Parties merged',
+        message: 'All entries are now under ${target.name}.',
+        position: SnackbarPosition.bottom,
       );
     } on ApiFailure catch (error) {
       _message(error.message);
@@ -673,6 +666,7 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       final party = _ledger.partyById(_partyId);
       if (party == null) {
         return Scaffold(
+          backgroundColor: context.colors.page,
           appBar: AppBar(),
           body: const EmptyState(
             icon: Icons.person_off_outlined,
@@ -683,312 +677,254 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       }
       final validPhone = normalizePhoneE164(party.phone).isNotEmpty;
       final snapshot = _currentSnapshot(party);
+      final colors = context.colors;
       return Scaffold(
-        appBar: AppBar(
-          title: Text(party.name),
-          actions: [
-            if (validPhone)
-              IconButton(
-                tooltip: '${'Call'.tr} ${party.name}',
-                onPressed: () => _call(party),
-                icon: const Icon(Icons.call_outlined),
-              ),
-            IconButton(
-              tooltip: 'Share statement'.tr,
-              onPressed: _loading || _sharing
+        backgroundColor: colors.page,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PartyDetailHeader(
+              party: party,
+              validPhone: validPhone,
+              sharing: _sharing,
+              onBack: () => Navigator.maybePop(context),
+              onCall: validPhone ? () => _call(party) : null,
+              onShare: _loading || _sharing
                   ? null
                   : () => _showShareSheet(party),
-              icon: _sharing
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+              onMarkSettled: !party.isArchived && party.balancePaise != 0
+                  ? () => _openAddEntry(
+                      action: party.balancePaise > 0
+                          ? EntryAction.received
+                          : EntryAction.gave,
+                      partyId: party.id,
+                      amountPaise: party.balancePaise.abs(),
                     )
-                  : const Icon(Icons.ios_share_rounded),
+                  : null,
+              onMore: () => unawaited(_showPartyOptions(party)),
             ),
-            PopupMenuButton<String>(
-              tooltip: 'Party options',
-              onSelected: (value) {
-                switch (value) {
-                  case 'edit':
-                    Get.toNamed(
-                      AppRoutes.addParty,
-                      arguments: {'partyId': party.id},
-                    );
-                  case 'opening':
-                    Get.toNamed(
-                      AppRoutes.openingBalance,
-                      arguments: {'partyId': party.id},
-                    );
-                  case 'archive':
-                    _archive(party);
-                  case 'merge':
-                    _mergeParty(party);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Edit party'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'opening',
-                  enabled: !party.isArchived,
-                  child: const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.flag_outlined),
-                    title: Text('Opening balance'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'archive',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      party.isArchived
-                          ? Icons.unarchive_outlined
-                          : Icons.archive_outlined,
-                    ),
-                    title: Text(
-                      party.isArchived ? 'Restore party' : 'Archive party',
-                    ),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: 'merge',
-                  enabled:
-                      !party.isArchived &&
-                      party.localSyncStatus == LocalSyncStatus.synced &&
-                      _mergeCandidates(party).isNotEmpty,
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.merge_outlined),
-                    title: Text('Merge duplicate party'.tr),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        body: RefreshIndicator(
-          onRefresh: _loadStatement,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                sliver: SliverList.list(
-                  children: [
-                    _PartyHeader(party: party, validPhone: validPhone),
-                    const SizedBox(height: 14),
-                    BalanceSentence(
-                      balancePaise: party.balancePaise,
-                      partyName: party.name,
-                    ),
-                    if (!validPhone) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: context.colors.amberSoft,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Color.alphaBlend(
-                              context.colors.amber.withValues(alpha: 0.16),
-                              context.colors.amberSoft,
-                            ),
-                          ),
-                        ),
-                        child: Row(
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadStatement,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Expanded(
-                              child: Text(
-                                'Add a valid mobile number to call or share '
-                                'directly by WhatsApp or SMS.',
+                            if (!validPhone) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: colors.amberSoft,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Color.alphaBlend(
+                                      colors.amber.withValues(alpha: 0.16),
+                                      colors.amberSoft,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Expanded(
+                                      child: Text(
+                                        'Add a valid mobile number to call or share '
+                                        'directly by WhatsApp or SMS.',
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Get.toNamed(
+                                        AppRoutes.addParty,
+                                        arguments: {'partyId': party.id},
+                                      ),
+                                      child: const Text('Edit'),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                            TextButton(
-                              onPressed: () => Get.toNamed(
-                                AppRoutes.addParty,
-                                arguments: {'partyId': party.id},
+                              const SizedBox(height: 12),
+                            ],
+                            if (party.isArchived)
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: colors.settledSoft,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: colors.line),
+                                ),
+                                child: Text(
+                                  'Archived party — restore it before adding a new entry.',
+                                  style: TextStyle(
+                                    color: colors.muted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            else ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DirectionActionButton(
+                                      action: EntryAction.gave,
+                                      compact: true,
+                                      onPressed: () => _openAddEntry(
+                                        action: EntryAction.gave,
+                                        partyId: party.id,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: DirectionActionButton(
+                                      action: EntryAction.received,
+                                      compact: true,
+                                      onPressed: () => _openAddEntry(
+                                        action: EntryAction.received,
+                                        partyId: party.id,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              child: const Text('Edit'),
+                            ],
+                            const SizedBox(height: 18),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Statement'.tr,
+                                    style: displayStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      color: colors.ink,
+                                    ),
+                                  ),
+                                ),
+                                Material(
+                                  color: colors.surface,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    side: BorderSide(color: colors.line),
+                                  ),
+                                  child: InkWell(
+                                    onTap: _chooseFilter,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.tune_rounded,
+                                            size: 18,
+                                            color: colors.muted,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _periodLabel,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              color: colors.ink,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
+                            const SizedBox(height: 10),
+                            if (_usingLocalFallback)
+                              const _StatementNotice(
+                                icon: Icons.cloud_off_outlined,
+                                message:
+                                    'Provisional saved statement — pending entries and '
+                                    'older server records may change after sync.',
+                              ),
+                            if (_statementError != null) ...[
+                              if (_usingLocalFallback)
+                                const SizedBox(height: 8),
+                              _StatementNotice(
+                                icon: Icons.info_outline_rounded,
+                                message: _statementError!,
+                              ),
+                            ],
+                            if (snapshot != null && !_loading) ...[
+                              if (_usingLocalFallback ||
+                                  _statementError != null ||
+                                  !snapshot.authoritative)
+                                const SizedBox(height: 10),
+                              _StatementSummary(snapshot: snapshot),
+                            ],
                           ],
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 16),
-                    if (party.isArchived)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: context.colors.settledSoft,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.colors.line),
-                        ),
-                        child: Text(
-                          'Archived party — restore it before adding a new entry.',
-                          style: TextStyle(
-                            color: context.colors.muted,
-                            fontWeight: FontWeight.w600,
+                    ),
+                    if (_loading)
+                      const SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: CircularProgressIndicator(),
                           ),
                         ),
                       )
-                    else ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DirectionActionButton(
-                              action: EntryAction.gave,
-                              compact: true,
-                              onPressed: () => Get.toNamed(
-                                AppRoutes.addEntry,
-                                arguments: {
-                                  'action': EntryAction.gave,
-                                  'partyId': party.id,
-                                },
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: DirectionActionButton(
-                              action: EntryAction.received,
-                              compact: true,
-                              onPressed: () => Get.toNamed(
-                                AppRoutes.addEntry,
-                                arguments: {
-                                  'action': EntryAction.received,
-                                  'partyId': party.id,
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
+                    else if (snapshot == null || snapshot.entries.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: EmptyState(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'No entries in this period'.tr,
+                          message: 'Try another period or add a new entry.'.tr,
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.only(top: 12, bottom: 8),
+                        sliver: SliverList.separated(
+                          itemCount: snapshot.entries.length,
+                          separatorBuilder: (_, _) =>
+                              Divider(height: 0.75, color: colors.page),
+                          itemBuilder: (context, index) {
+                            final item = snapshot.entries[index];
+                            return EntriesListRow(
+                              entry: item.entry,
+                              titleOverride: _entryTitle(item.entry),
+                              useDirectionAvatar: true,
+                              onTap: () => _openEntry(item.entry),
+                            );
+                          },
+                        ),
                       ),
-                      if (party.balancePaise != 0) ...[
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          onPressed: () => Get.toNamed(
-                            AppRoutes.addEntry,
-                            arguments: {
-                              'action': party.balancePaise > 0
-                                  ? EntryAction.received
-                                  : EntryAction.gave,
-                              'partyId': party.id,
-                              'amountPaise': party.balancePaise.abs(),
-                            },
-                          ),
-                          icon: const Icon(Icons.task_alt_rounded),
-                          label: Text('Mark settled'.tr),
-                        ),
-                      ],
-                    ],
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Statement'.tr,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 42),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                          onPressed: _chooseFilter,
-                          icon: const Icon(Icons.tune_rounded, size: 18),
-                          label: Text(_periodLabel),
-                        ),
-                      ],
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                        child: _loadingMore
+                            ? const Center(child: CircularProgressIndicator())
+                            : _hasMore
+                            ? OutlinedButton(
+                                onPressed: _loadMore,
+                                child: const Text('Load more'),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
                     ),
-                    const SizedBox(height: 10),
-                    if (_usingLocalFallback)
-                      const _StatementNotice(
-                        icon: Icons.cloud_off_outlined,
-                        message:
-                            'Provisional saved statement — pending entries and '
-                            'older server records may change after sync.',
-                      ),
-                    if (_statementError != null)
-                      _StatementNotice(
-                        icon: Icons.info_outline_rounded,
-                        message: _statementError!,
-                      ),
-                    if (snapshot != null && !_loading) ...[
-                      if (_usingLocalFallback || !snapshot.authoritative)
-                        const SizedBox(height: 10),
-                      _StatementSummary(snapshot: snapshot),
-                      const SizedBox(height: 12),
-                    ],
                   ],
                 ),
               ),
-              if (_loading)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
-                )
-              else if (snapshot == null || snapshot.entries.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'No entries in this period'.tr,
-                    message: 'Try another period or add a new entry.'.tr,
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                  sliver: SliverList.builder(
-                    itemCount: snapshot.entries.length,
-                    itemBuilder: (context, index) {
-                      final item = snapshot.entries[index];
-                      return DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: context.colors.line),
-                          ),
-                        ),
-                        child: EntryTile(
-                          entry: item.entry,
-                          showPartyName: false,
-                          runningBalancePaise: item.runningBalancePaise,
-                          onTap: () => _openEntry(item.entry),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  child: _loadingMore
-                      ? const Center(child: CircularProgressIndicator())
-                      : _hasMore
-                      ? OutlinedButton(
-                          onPressed: _loadMore,
-                          child: const Text('Load more'),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     });
@@ -1006,11 +942,15 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
     List<StatementEntry> entries,
   ) {
     final known = entries.map((item) => item.entry.id).toSet();
-    final pending = _pendingEntries(
+    _pinnedOverlayIds.removeWhere(known.contains);
+    final overlay = _overlayEntries(
       party,
     ).where((item) => !known.contains(item.entry.id)).toList();
-    final combined = [...pending, ...entries]..sort(_newestFirst);
-    final pendingEffect = pending
+    for (final item in overlay) {
+      _pinnedOverlayIds.add(item.entry.id);
+    }
+    final combined = [...overlay, ...entries]..sort(_newestFirst);
+    final overlayEffect = overlay
         .where((item) => item.entry.status == EntryStatus.posted)
         .fold<int>(0, (sum, item) => sum + item.entry.balanceEffectPaise);
     final range = _statementDates(party, page.period, combined);
@@ -1018,10 +958,10 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
       from: range.$1,
       to: range.$2,
       openingBalancePaise: page.openingBalancePaise,
-      closingBalancePaise: page.closingBalancePaise + pendingEffect,
+      closingBalancePaise: page.closingBalancePaise + overlayEffect,
       entries: combined,
-      totalCount: page.totalCount + pending.length,
-      authoritative: pending.isEmpty,
+      totalCount: page.totalCount + overlay.length,
+      authoritative: overlay.isEmpty,
     );
   }
 
@@ -1073,7 +1013,9 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
     );
   }
 
-  List<StatementEntry> _pendingEntries(Party party) {
+  /// Local rows missing from the remote page: still-pending mutations, plus
+  /// ids pinned while waiting for the statement API to catch up after sync.
+  List<StatementEntry> _overlayEntries(Party party) {
     final range = _selectedRange;
     final running = <String, int>{};
     final chronological =
@@ -1089,7 +1031,8 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
     return chronological
         .where(
           (entry) =>
-              entry.localSyncStatus != LocalSyncStatus.synced &&
+              (entry.localSyncStatus != LocalSyncStatus.synced ||
+                  _pinnedOverlayIds.contains(entry.id)) &&
               (range.$1 == null || !entry.entryDate.isBefore(range.$1!)) &&
               (range.$2 == null || !entry.entryDate.isAfter(_endOf(range.$2!))),
         )
@@ -1156,6 +1099,13 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
     return date != 0 ? date : a.sequence.compareTo(b.sequence);
   }
 
+  String _entryTitle(LedgerEntry entry) {
+    final note = entry.narration.trim();
+    if (note.isNotEmpty) return note;
+    if (entry.isOpeningBalance) return 'Opening balance';
+    return entry.action == EntryAction.gave ? 'You gave' : 'You got';
+  }
+
   String get _periodLabel => switch (_period) {
     'month' => 'This month'.tr,
     '30' => 'Last 30 days'.tr,
@@ -1172,82 +1122,533 @@ class _PartyDetailPageState extends State<PartyDetailPage> {
 
 enum _ShareAction { whatsApp, sms, pdf, system, copy }
 
-/// Header identity block: rounded-square avatar toned by the balance
-/// direction, party name, and the phone number when one is saved.
-class _PartyHeader extends StatelessWidget {
-  const _PartyHeader({required this.party, required this.validPhone});
+/// Green party header + white balance card, matching Home / Entries chrome.
+class _PartyDetailHeader extends StatelessWidget {
+  const _PartyDetailHeader({
+    required this.party,
+    required this.validPhone,
+    required this.sharing,
+    required this.onBack,
+    required this.onCall,
+    required this.onShare,
+    required this.onMarkSettled,
+    required this.onMore,
+  });
 
   final Party party;
   final bool validPhone;
+  final bool sharing;
+  final VoidCallback onBack;
+  final VoidCallback? onCall;
+  final VoidCallback? onShare;
+  final VoidCallback? onMarkSettled;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final tones = balanceTones(context, party.balanceKind);
-    return Semantics(
-      container: true,
-      label:
-          '${party.name}'
-          '${party.phone.isEmpty ? '' : ', ${formatPhoneForDisplay(party.phone)}'}',
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: tones.background,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: tones.border),
-            ),
-            child: Text(
-              initials(party.name),
-              style: displayStyle(
-                fontSize: 18,
-                color: tones.foreground,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  party.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                if (party.phone.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Icon(
-                        validPhone
-                            ? Icons.phone_outlined
-                            : Icons.phone_disabled_outlined,
-                        size: 16,
-                        color: colors.muted,
+    final kind = party.balanceKind;
+    final amountColor = kind == BalanceKind.pay
+        ? colors.red
+        : kind == BalanceKind.receive
+        ? colors.green
+        : colors.muted;
+    final label = kind == BalanceKind.pay
+        ? "You'll Pay"
+        : kind == BalanceKind.receive
+        ? "You'll Receive"
+        : 'Settled';
+    final avatar = avatarColorsForName(party.name, colors);
+    final phoneDisplay = party.phone.trim().isEmpty
+        ? null
+        : formatPhoneForDisplay(party.phone);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+      ),
+      child: Container(
+        width: double.infinity,
+        color: colors.brand,
+        child: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+                child: Row(
+                  children: [
+                    _HeaderIconButton(
+                      tooltip: 'Back',
+                      onPressed: onBack,
+                      icon: Icons.arrow_back_rounded,
+                    ),
+                    Expanded(
+                      child: Text(
+                        party.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: displayStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: colors.onBrand,
+                          letterSpacing: -0.2,
+                        ),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          formatPhoneForDisplay(party.phone),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: colors.muted),
+                    ),
+                    if (onCall != null)
+                      _HeaderIconButton(
+                        tooltip: '${'Call'.tr} ${party.name}',
+                        onPressed: onCall,
+                        icon: Icons.call_outlined,
+                      ),
+                    _HeaderIconButton(
+                      tooltip: 'Share statement'.tr,
+                      onPressed: onShare,
+                      icon: Icons.ios_share_rounded,
+                      busy: sharing,
+                    ),
+                    _HeaderIconButton(
+                      tooltip: 'Party options',
+                      onPressed: onMore,
+                      icon: Icons.more_vert_rounded,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.ink.withValues(alpha: 0.08),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: avatar.background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        avatarInitial(party.name),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: avatar.foreground,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            label,
+                            style: TextStyle(
+                              color: colors.muted,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
+                              height: 1.1,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              formatMoney(party.balancePaise, absolute: true),
+                              style: displayStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: amountColor,
+                                letterSpacing: -0.5,
+                              ),
+                            ),
+                          ),
+                          if (phoneDisplay != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              phoneDisplay,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: colors.muted,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w500,
+                                height: 1.1,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (onMarkSettled != null) ...[
+                      const SizedBox(width: 8),
+                      Material(
+                        color: avatar.background,
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          onTap: onMarkSettled,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.task_alt_rounded,
+                                  size: 15,
+                                  color: avatar.foreground,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Settle'.tr,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: avatar.foreground,
+                                    height: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PartyOptionsSheet extends StatelessWidget {
+  const _PartyOptionsSheet({required this.party, required this.canMerge});
+
+  final Party party;
+  final bool canMerge;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final archived = party.isArchived;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.page,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colors.line,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Party options'.tr,
+                          style: displayStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: colors.ink,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          party.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: colors.muted,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Material(
+                    color: colors.settledSoft,
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      onTap: () => Navigator.pop(context),
+                      customBorder: const CircleBorder(),
+                      child: SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 18,
+                          color: colors.muted,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              _PartyOptionsCard(
+                children: [
+                  _PartyOptionTile(
+                    icon: Icons.edit_outlined,
+                    title: 'Edit party'.tr,
+                    subtitle: 'Name, phone, group, or notes',
+                    onTap: () => Navigator.pop(context, 'edit'),
+                  ),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    indent: 62,
+                    color: colors.line,
+                  ),
+                  _PartyOptionTile(
+                    icon: Icons.flag_outlined,
+                    title: 'Opening balance'.tr,
+                    subtitle: archived
+                        ? 'Restore this party to set an opening balance'
+                        : 'Set or update the starting balance',
+                    enabled: !archived,
+                    onTap: archived
+                        ? null
+                        : () => Navigator.pop(context, 'opening'),
+                  ),
+                  if (canMerge) ...[
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 62,
+                      color: colors.line,
+                    ),
+                    _PartyOptionTile(
+                      icon: Icons.merge_outlined,
+                      title: 'Merge duplicate party'.tr,
+                      subtitle: 'Move entries into another party',
+                      onTap: () => Navigator.pop(context, 'merge'),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              _PartyOptionsCard(
+                children: [
+                  _PartyOptionTile(
+                    icon: archived
+                        ? Icons.unarchive_outlined
+                        : Icons.archive_outlined,
+                    title: archived ? 'Restore party'.tr : 'Archive party'.tr,
+                    subtitle: archived
+                        ? 'Bring this party back for new entries'
+                        : 'Hide from Home without deleting history',
+                    iconBackground: archived
+                        ? colors.greenSoft
+                        : colors.amberSoft,
+                    iconColor: archived ? colors.greenDark : colors.amber,
+                    onTap: () => Navigator.pop(context, 'archive'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PartyOptionsCard extends StatelessWidget {
+  const _PartyOptionsCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final radius = BorderRadius.circular(16);
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
+      ),
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(color: colors.line),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      ),
+    );
+  }
+}
+
+class _PartyOptionTile extends StatelessWidget {
+  const _PartyOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.enabled = true,
+    this.iconBackground,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+  final bool enabled;
+  final Color? iconBackground;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final foreground = enabled ? colors.ink : colors.muted;
+    final muted = colors.muted.withValues(alpha: enabled ? 1 : 0.7);
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: iconBackground ?? colors.greenSoft,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(icon, size: 20, color: iconColor ?? colors.greenDark),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: foreground,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: colors.muted.withValues(alpha: enabled ? 1 : 0.45),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  const _HeaderIconButton({
+    required this.tooltip,
+    required this.onPressed,
+    required this.icon,
+    this.busy = false,
+  });
+
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: colors.onBrand.withValues(alpha: 0.1),
+          shape: const CircleBorder(),
+          child: InkWell(
+            onTap: onPressed,
+            customBorder: const CircleBorder(),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: busy
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.onBrand,
+                        ),
+                      )
+                    : Icon(icon, size: 18, color: colors.onBrand),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1395,36 +1796,48 @@ class _StatementSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final largeText = MediaQuery.textScalerOf(context).scale(1) >= 1.35;
-    final opening = _BalanceBox(
-      label: 'Opening balance'.tr,
-      balancePaise: snapshot.openingBalancePaise,
-    );
-    final closing = _BalanceBox(
-      label: 'Closing balance'.tr,
-      balancePaise: snapshot.closingBalancePaise,
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          '${formatShortDate(snapshot.from)} – ${formatShortDate(snapshot.to)}',
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: context.colors.muted),
-        ),
-        const SizedBox(height: 8),
-        if (largeText)
-          Column(children: [opening, const SizedBox(height: 8), closing])
-        else
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              '${formatShortDate(snapshot.from)} – ${formatShortDate(snapshot.to)}',
+              style: TextStyle(
+                color: colors.muted,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: opening),
-              const SizedBox(width: 8),
-              Expanded(child: closing),
+              Expanded(
+                child: _BalanceBox(
+                  label: 'Opening balance'.tr,
+                  balancePaise: snapshot.openingBalancePaise,
+                ),
+              ),
+              Container(width: 1, height: 64, color: colors.line),
+              Expanded(
+                child: _BalanceBox(
+                  label: 'Closing balance'.tr,
+                  balancePaise: snapshot.closingBalancePaise,
+                ),
+              ),
             ],
           ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1443,40 +1856,45 @@ class _BalanceBox extends StatelessWidget {
         : balancePaise < 0
         ? BalanceKind.pay
         : BalanceKind.settled;
-    final tones = balanceTones(context, kind);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tones.background,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tones.border),
-      ),
+    final amountColor = kind == BalanceKind.pay
+        ? colors.red
+        : kind == BalanceKind.receive
+        ? colors.green
+        : colors.muted;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: tones.foreground,
-              fontWeight: FontWeight.w700,
+            style: TextStyle(
+              color: colors.muted,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 3),
-          Text(
-            formatMoney(balancePaise, absolute: true),
-            style: displayStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w700,
-              color: tones.foreground,
-              letterSpacing: -0.4,
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              formatMoney(balancePaise, absolute: true),
+              style: displayStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: amountColor,
+                letterSpacing: -0.4,
+              ),
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             balanceSentenceText(balancePaise),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            style: TextStyle(
               color: colors.muted,
               fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -1515,38 +1933,6 @@ class _StatementNotice extends StatelessWidget {
             child: Text(
               message,
               style: TextStyle(color: colors.muted, height: 1.35),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: TextStyle(color: context.colors.muted),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],

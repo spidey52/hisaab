@@ -63,3 +63,22 @@ export function toDateOnly(value: unknown): string {
   const parsed = dayjs(text);
   return parsed.isValid() ? parsed.format(DATE_ONLY) : "";
 }
+
+/** Instant timestamps for API JSON — always ISO-8601 so mobile DateTime.parse works. */
+export function toIsoTimestamp(value: unknown): string {
+  if (value == null || value === "") return "";
+  if (dayjs.isDayjs(value) || value instanceof Date) {
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.toISOString() : "";
+  }
+  const text = String(value).trim();
+  if (!text) return "";
+  const parsed = dayjs(text);
+  return parsed.isValid() ? parsed.toISOString() : text;
+}
+
+export function toIsoTimestampOrNull(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const iso = toIsoTimestamp(value);
+  return iso || null;
+}

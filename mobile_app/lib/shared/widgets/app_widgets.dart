@@ -1,5 +1,6 @@
 export 'async_action_button.dart';
 export 'amount_entry_field.dart';
+export 'app_snackbar.dart';
 export 'calculator_keypad.dart';
 export 'balance_widgets.dart';
 export 'brand_mark.dart';

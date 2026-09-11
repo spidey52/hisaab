@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../app/app.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/models/models.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/balance_widgets.dart';
 import '../../shared/widgets/brand_mark.dart';
 import '../../shared/widgets/direction_action_button.dart';
@@ -19,10 +20,10 @@ class HomePage extends GetView<LedgerController> {
 
   void _addEntry(EntryAction action) {
     if (controller.parties.where((party) => !party.isArchived).isEmpty) {
-      Get.snackbar(
-        'First, add a party',
-        'An entry needs a customer or supplier. Add one now.',
-        snackPosition: SnackPosition.BOTTOM,
+      AppSnackbar.warning(
+        title: 'First, add a party',
+        message: 'An entry needs a customer or supplier. Add one now.',
+        position: SnackbarPosition.bottom,
       );
       Get.toNamed(AppRoutes.addParty);
       return;

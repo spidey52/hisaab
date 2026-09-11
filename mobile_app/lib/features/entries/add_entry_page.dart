@@ -12,7 +12,9 @@ import '../../data/models/models.dart';
 import '../../data/repositories/ledger_repository.dart';
 import '../../services/calculator_preference_service.dart';
 import '../../services/form_draft_service.dart';
+import '../../app/modules/shared/widget/ledger_activity_row.dart';
 import '../../shared/widgets/amount_entry_field.dart';
+import '../../shared/widgets/app_snackbar.dart';
 import '../../shared/widgets/async_action_button.dart';
 import '../../shared/widgets/balance_widgets.dart';
 import '../../shared/widgets/calculator_keypad.dart';
@@ -74,8 +76,7 @@ class _AddEntryPageState extends State<AddEntryPage>
         _note.text = entry.narration;
         _date = entry.entryDate;
         _paymentAccount = entry.paymentAccount;
-        _optional =
-            entry.narration.isNotEmpty || entry.paymentAccount != null;
+        _optional = entry.narration.isNotEmpty || entry.paymentAccount != null;
         _calculatorExpression = _amount.text;
         _loadCalculatorPreference();
         _initializeDrafts();
@@ -366,10 +367,10 @@ class _AddEntryPageState extends State<AddEntryPage>
       if (queued != null) {
         _showQueuedEntry(queued);
       } else {
-        Get.snackbar(
-          'Entry updated',
-          'The corrected entry is now in the statement.',
-          snackPosition: SnackPosition.BOTTOM,
+        AppSnackbar.success(
+          title: 'Entry updated',
+          message: 'The corrected entry is now in the statement.',
+          position: SnackbarPosition.bottom,
         );
       }
     } on ApiFailure catch (error) {
@@ -382,30 +383,33 @@ class _AddEntryPageState extends State<AddEntryPage>
 
   void _showQueuedEntry(OptimisticMutationResult result) {
     final remaining = result.undoUntil.difference(DateTime.now().toUtc());
-    Get.snackbar(
-      'Entry saved on this phone',
-      '${_action == EntryAction.gave ? 'Recorded as You gave.' : 'Recorded as You got.'} '
+    AppSnackbar.success(
+      title: 'Entry saved on this phone',
+      message:
+          '${_action == EntryAction.gave ? 'Recorded as You gave.' : 'Recorded as You got.'} '
           'It will sync automatically.',
       duration: remaining.isNegative ? const Duration(seconds: 1) : remaining,
-      snackPosition: SnackPosition.BOTTOM,
-      mainButton: remaining.isNegative
+      position: SnackbarPosition.bottom,
+      actionLabel: remaining.isNegative ? null : 'Undo',
+      onAction: remaining.isNegative
           ? null
-          : TextButton(
-              onPressed: () async {
-                Get.closeCurrentSnackbar();
-                final outcome = await _ledger.undoPending(result.operationId);
-                Get.snackbar(
-                  outcome == UndoPendingResult.undone
-                      ? 'Entry undone'
-                      : 'Entry is already syncing',
-                  outcome == UndoPendingResult.undone
-                      ? 'The pending entry was removed.'
-                      : 'A posted or uploading entry is never cancelled silently.',
-                  snackPosition: SnackPosition.BOTTOM,
+          : () async {
+              final outcome = await _ledger.undoPending(result.operationId);
+              if (outcome == UndoPendingResult.undone) {
+                AppSnackbar.success(
+                  title: 'Entry undone',
+                  message: 'The pending entry was removed.',
+                  position: SnackbarPosition.bottom,
                 );
-              },
-              child: const Text('Undo'),
-            ),
+              } else {
+                AppSnackbar.warning(
+                  title: 'Entry is already syncing',
+                  message:
+                      'A posted or uploading entry is never cancelled silently.',
+                  position: SnackbarPosition.bottom,
+                );
+              }
+            },
     );
   }
 
@@ -422,6 +426,11 @@ class _AddEntryPageState extends State<AddEntryPage>
         : fixedParty.balancePaise +
               (_action == EntryAction.gave ? amountPaise : -amountPaise);
     final gave = _action == EntryAction.gave;
+    final title = _editingEntry != null
+        ? 'Edit entry'.tr
+        : gave
+        ? 'You gave'.tr
+        : 'You got'.tr;
 
     return PopScope<Object?>(
       canPop: !_dirty || _leavingAfterSave,
@@ -429,23 +438,24 @@ class _AddEntryPageState extends State<AddEntryPage>
         if (!didPop) unawaited(_handleBackNavigation());
       },
       child: Scaffold(
+        backgroundColor: colors.page,
         appBar: AppBar(
+          backgroundColor: colors.surface,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
           title: Text(
-            _editingEntry != null
-                ? 'Edit entry'.tr
-                : gave
-                ? 'You gave'.tr
-                : 'You got'.tr,
+            title,
             style: displayStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.2,
-              color: _editingEntry != null
-                  ? colors.ink
-                  : gave
-                  ? colors.red
-                  : colors.green,
+              color: colors.ink,
             ),
+          ),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Divider(height: 1, thickness: 1, color: colors.line),
           ),
         ),
         body: SafeArea(
@@ -453,7 +463,7 @@ class _AddEntryPageState extends State<AddEntryPage>
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 Row(
                   children: [
@@ -482,42 +492,11 @@ class _AddEntryPageState extends State<AddEntryPage>
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 if (Get.arguments is Map &&
                     (Get.arguments as Map)['partyId'] != null &&
                     fixedParty != null)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Row(
-                        children: [
-                          _PartyAvatarTile(name: fixedParty.name),
-                          const SizedBox(width: 13),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Party'.tr,
-                                  style: TextStyle(
-                                    color: colors.muted,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                Text(
-                                  fixedParty.name,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
+                  _PartySummaryCard(party: fixedParty)
                 else
                   FormField<String>(
                     key: ValueKey(_partyId),
@@ -547,7 +526,7 @@ class _AddEntryPageState extends State<AddEntryPage>
                   onToggleCalculator: _toggleCalculator,
                   onChanged: (_) => setState(() {}),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 _DateChipRow(
                   date: _date,
                   onToday: () => _setDate(DateTime.now()),
@@ -557,7 +536,7 @@ class _AddEntryPageState extends State<AddEntryPage>
                   onPickDate: _pickDate,
                 ),
                 if (_calculatorVisible) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   CalculatorKeypad(
                     expression: _calculatorExpression,
                     onExpressionChanged: (value) {
@@ -567,92 +546,21 @@ class _AddEntryPageState extends State<AddEntryPage>
                     onUseAmount: _useCalculatedAmount,
                   ),
                 ],
-                const SizedBox(height: 12),
-                Card(
-                  child: Column(
-                    children: [
-                      ListTile(
-                        title: Text(
-                          'Optional details'.tr,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: Text(
-                          _optional
-                              ? 'Note and cash or bank'
-                              : 'Add a note or payment account',
-                        ),
-                        trailing: Icon(
-                          _optional
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                        ),
-                        onTap: () {
-                          setState(() => _optional = !_optional);
-                          _markDirty();
-                        },
-                      ),
-                      if (_optional)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  for (final preset in _notePresets)
-                                    ActionChip(
-                                      visualDensity: VisualDensity.compact,
-                                      label: Text(preset),
-                                      onPressed: () =>
-                                          _applyNotePreset(preset),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: _note,
-                                maxLength: 240,
-                                minLines: 1,
-                                maxLines: 3,
-                                textCapitalization:
-                                    TextCapitalization.sentences,
-                                decoration: InputDecoration(
-                                  labelText: 'Note (optional)'.tr,
-                                  hintText: 'Example: Goods or payment',
-                                  counterText: '',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              DropdownButtonFormField<String?>(
-                                initialValue: _paymentAccount,
-                                decoration: InputDecoration(
-                                  labelText: 'Payment account (optional)'.tr,
-                                ),
-                                items: [
-                                  DropdownMenuItem<String?>(
-                                    child: Text('Not specified'.tr),
-                                  ),
-                                  DropdownMenuItem<String?>(
-                                    value: 'cash',
-                                    child: Text('Cash'.tr),
-                                  ),
-                                  DropdownMenuItem<String?>(
-                                    value: 'bank',
-                                    child: Text('Bank'.tr),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setState(() => _paymentAccount = value);
-                                  _markDirty();
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
+                const SizedBox(height: 14),
+                _OptionalDetailsCard(
+                  expanded: _optional,
+                  onToggle: () {
+                    setState(() => _optional = !_optional);
+                    _markDirty();
+                  },
+                  notePresets: _notePresets,
+                  onPreset: _applyNotePreset,
+                  noteController: _note,
+                  paymentAccount: _paymentAccount,
+                  onPaymentAccountChanged: (value) {
+                    setState(() => _paymentAccount = value);
+                    _markDirty();
+                  },
                 ),
                 if (previewBalance != null && amountPaise > 0) ...[
                   const SizedBox(height: 14),
@@ -661,7 +569,7 @@ class _AddEntryPageState extends State<AddEntryPage>
                     partyName: fixedParty!.name,
                   ),
                 ],
-                const SizedBox(height: 22),
+                const SizedBox(height: 24),
                 Obx(
                   () => AsyncActionButton(
                     busy: _ledger.mutating.value,
@@ -712,8 +620,11 @@ class _DateChipRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final today = dateOnly(DateTime.now());
-    final yesterday = dateOnly(DateTime.now().subtract(const Duration(days: 1)));
+    final yesterday = dateOnly(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
     final selected = dateOnly(date);
     final isToday = selected == today;
     final isYesterday = selected == yesterday;
@@ -722,36 +633,349 @@ class _DateChipRow extends StatelessWidget {
     return Semantics(
       container: true,
       label: 'Entry date',
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            ChoiceChip(
-              label: const Text('Today'),
-              selected: isToday,
-              onSelected: (_) => onToday(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Date'.tr,
+            style: TextStyle(
+              color: colors.muted,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(width: 8),
-            ChoiceChip(
-              label: const Text('Yesterday'),
-              selected: isYesterday,
-              onSelected: (_) => onYesterday(),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _DatePill(label: 'Today', selected: isToday, onTap: onToday),
+                const SizedBox(width: 8),
+                _DatePill(
+                  label: 'Yesterday',
+                  selected: isYesterday,
+                  onTap: onYesterday,
+                ),
+                const SizedBox(width: 8),
+                _DatePill(
+                  label: isCustom ? formatShortDate(date) : 'Pick a date',
+                  selected: isCustom,
+                  icon: Icons.calendar_today_outlined,
+                  onTap: onPickDate,
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            ChoiceChip(
-              avatar: const Icon(Icons.calendar_today_outlined, size: 16),
-              label: Text(isCustom ? formatShortDate(date) : 'Pick a date'),
-              selected: isCustom,
-              onSelected: (_) => onPickDate(),
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DatePill extends StatelessWidget {
+  const _DatePill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Material(
+      color: selected ? colors.brand : colors.surface,
+      shape: StadiumBorder(
+        side: BorderSide(color: selected ? colors.brand : colors.line),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 15,
+                  color: selected ? colors.onBrand : colors.muted,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? colors.onBrand : colors.muted,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Rounded-square initials tile matching `party_tile.dart`.
+class _PartySummaryCard extends StatelessWidget {
+  const _PartySummaryCard({required this.party});
+
+  final Party party;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.line),
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _PartyAvatarTile(name: party.name),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Party'.tr,
+                  style: TextStyle(
+                    color: colors.muted,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  party.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: colors.ink,
+                    letterSpacing: -0.15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionalDetailsCard extends StatelessWidget {
+  const _OptionalDetailsCard({
+    required this.expanded,
+    required this.onToggle,
+    required this.notePresets,
+    required this.onPreset,
+    required this.noteController,
+    required this.paymentAccount,
+    required this.onPaymentAccountChanged,
+  });
+
+  final bool expanded;
+  final VoidCallback onToggle;
+  final List<String> notePresets;
+  final ValueChanged<String> onPreset;
+  final TextEditingController noteController;
+  final String? paymentAccount;
+  final ValueChanged<String?> onPaymentAccountChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.line),
+        boxShadow: [
+          BoxShadow(
+            color: colors.ink.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colors.settledSoft,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.notes_rounded,
+                        size: 18,
+                        color: colors.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Optional details'.tr,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: colors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            expanded
+                                ? 'Note and cash or bank'
+                                : 'Add a note or payment account',
+                            style: TextStyle(
+                              color: colors.muted,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: colors.muted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (expanded) ...[
+            Divider(height: 1, thickness: 1, color: colors.line),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final preset in notePresets)
+                        _NotePresetChip(
+                          label: preset,
+                          onTap: () => onPreset(preset),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteController,
+                    maxLength: 240,
+                    minLines: 1,
+                    maxLines: 3,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      labelText: 'Note (optional)'.tr,
+                      hintText: 'Example: Goods or payment',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: paymentAccount,
+                    decoration: InputDecoration(
+                      labelText: 'Payment account (optional)'.tr,
+                    ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        child: Text('Not specified'.tr),
+                      ),
+                      DropdownMenuItem<String?>(
+                        value: 'cash',
+                        child: Text('Cash'.tr),
+                      ),
+                      DropdownMenuItem<String?>(
+                        value: 'bank',
+                        child: Text('Bank'.tr),
+                      ),
+                    ],
+                    onChanged: onPaymentAccountChanged,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NotePresetChip extends StatelessWidget {
+  const _NotePresetChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Material(
+      color: colors.settledSoft,
+      shape: StadiumBorder(side: BorderSide(color: colors.line)),
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: colors.ink,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Circular pastel initials tile matching Home / Entries avatars.
 class _PartyAvatarTile extends StatelessWidget {
   const _PartyAvatarTile({required this.name});
 
@@ -760,19 +984,20 @@ class _PartyAvatarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final avatar = avatarColorsForName(name, colors);
     return Container(
-      width: 46,
-      height: 46,
+      width: 44,
+      height: 44,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: colors.greenSoft,
-        borderRadius: BorderRadius.circular(15),
+        color: avatar.background,
+        shape: BoxShape.circle,
       ),
       child: Text(
-        initials(name),
-        style: displayStyle(
+        avatarInitial(name),
+        style: TextStyle(
           fontSize: 16,
-          color: colors.greenDark,
+          color: avatar.foreground,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -805,8 +1030,10 @@ class _PartyPickerField extends StatelessWidget {
         children: [
           Material(
             color: colors.surface,
+            elevation: 0,
+            shadowColor: colors.ink.withValues(alpha: 0.08),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               side: BorderSide(
                 color: hasError ? colors.red : colors.line,
                 width: hasError ? 1.4 : 1,
@@ -821,12 +1048,12 @@ class _PartyPickerField extends StatelessWidget {
                   children: [
                     if (party == null)
                       Container(
-                        width: 46,
-                        height: 46,
+                        width: 44,
+                        height: 44,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: colors.settledSoft,
-                          borderRadius: BorderRadius.circular(15),
+                          shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.person_outline_rounded,
@@ -835,26 +1062,30 @@ class _PartyPickerField extends StatelessWidget {
                       )
                     else
                       _PartyAvatarTile(name: party!.name),
-                    const SizedBox(width: 13),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             'Party'.tr,
-                            style: TextStyle(color: colors.muted, fontSize: 12),
+                            style: TextStyle(
+                              color: colors.muted,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            party?.name ??
-                                'Choose a customer or supplier'.tr,
+                            party?.name ?? 'Choose a customer or supplier'.tr,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 16,
+                              letterSpacing: -0.15,
                               color: party == null ? colors.muted : colors.ink,
                               fontWeight: party == null
-                                  ? FontWeight.w400
+                                  ? FontWeight.w500
                                   : FontWeight.w700,
                             ),
                           ),
@@ -862,7 +1093,7 @@ class _PartyPickerField extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.search_rounded, color: colors.muted),
+                    Icon(Icons.search_rounded, color: colors.muted, size: 22),
                   ],
                 ),
               ),
@@ -922,13 +1153,18 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   'Choose a party'.tr,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  style: displayStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: colors.ink,
+                    letterSpacing: -0.3,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -937,7 +1173,9 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
                   textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     hintText: 'Search name or phone'.tr,
-                    prefixIcon: const Icon(Icons.search_rounded),
+                    prefixIcon: Icon(Icons.search_rounded, color: colors.muted),
+                    filled: true,
+                    fillColor: colors.page,
                   ),
                 ),
               ],
@@ -945,39 +1183,61 @@ class _SearchablePartySheetState extends State<_SearchablePartySheet> {
           ),
           Expanded(
             child: parties.isEmpty
-                ? const Center(child: Text('No matching parties'))
+                ? Center(
+                    child: Text(
+                      'No matching parties',
+                      style: TextStyle(color: colors.muted),
+                    ),
+                  )
                 : ListView.separated(
                     controller: scrollController,
                     itemCount: parties.length,
-                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: colors.line),
                     itemBuilder: (context, index) {
                       final party = parties[index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 4,
-                        ),
-                        leading: _PartyAvatarTile(name: party.name),
-                        title: Text(
-                          party.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        subtitle: party.phone.trim().isEmpty
-                            ? null
-                            : Text(
-                                party.phone,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        trailing: party.id == widget.selectedPartyId
-                            ? Icon(
-                                Icons.check_circle_rounded,
-                                color: colors.green,
+                      final selected = party.id == widget.selectedPartyId;
+                      return Material(
+                        color: selected
+                            ? Color.alphaBlend(
+                                colors.brand.withValues(alpha: 0.06),
+                                colors.surface,
                               )
-                            : const Icon(Icons.chevron_right_rounded),
-                        onTap: () => Navigator.pop(context, party.id),
+                            : colors.surface,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          leading: _PartyAvatarTile(name: party.name),
+                          title: Text(
+                            party.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: colors.ink,
+                            ),
+                          ),
+                          subtitle: party.phone.trim().isEmpty
+                              ? null
+                              : Text(
+                                  party.phone,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(color: colors.muted),
+                                ),
+                          trailing: selected
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: colors.green,
+                                )
+                              : Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: colors.muted,
+                                ),
+                          onTap: () => Navigator.pop(context, party.id),
+                        ),
                       );
                     },
                   ),

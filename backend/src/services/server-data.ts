@@ -12,7 +12,7 @@ import {
 } from "../db";
 import type { BootstrapData, Entry, Group, Party } from "../utils/types";
 import type { ServerContext } from "./server-auth";
-import { nowIso, toDateOnly } from "../utils/date-utils";
+import { nowIso, toDateOnly, toIsoTimestamp, toIsoTimestampOrNull } from "../utils/date-utils";
 
 export async function getBootstrapData(
   context: ServerContext,
@@ -163,7 +163,7 @@ export async function getBootstrapData(
         currency: "INR",
         timezone: String(currentCompany.timezone),
         version: Number(currentCompany.version ?? 1),
-        updatedAt: String(currentCompany.updated_at),
+        updatedAt: toIsoTimestamp(currentCompany.updated_at),
       },
       companies: companyResult.map((row) => ({
         id: String(row.id),
@@ -171,7 +171,7 @@ export async function getBootstrapData(
         currency: "INR" as const,
         timezone: String(row.timezone),
         version: Number(row.version ?? 1),
-        updatedAt: String(row.updated_at),
+        updatedAt: toIsoTimestamp(row.updated_at),
       })),
       groups: groupResult.map((row) =>
         rowToGroup(row as Record<string, unknown>)
@@ -193,7 +193,7 @@ function rowToGroup(row: Record<string, unknown>): Group {
     id: String(row.id),
     name: String(row.name),
     version: Number(row.version ?? 1),
-    updatedAt: String(row.updated_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
   };
 }
 
@@ -210,9 +210,9 @@ export function rowToParty(row: Record<string, unknown>): Party {
     groupName: row.group_name ? String(row.group_name) : null,
     balancePaise: Number(row.balance_paise ?? 0),
     transactionCount: Number(row.transaction_count ?? 0),
-    archivedAt: row.archived_at ? String(row.archived_at) : null,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    archivedAt: toIsoTimestampOrNull(row.archived_at),
+    createdAt: toIsoTimestamp(row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at),
     version: Number(row.version ?? 1),
   };
 }
@@ -236,11 +236,11 @@ export function rowToEntry(row: Record<string, unknown>): Entry {
     paymentAccount: row.payment_account ? String(row.payment_account) : null,
     status: row.status === "cancelled" ? "cancelled" : "posted",
     createdByName: String(row.created_by_name),
-    createdAt: String(row.created_at),
-    editedAt: row.edited_at ? String(row.edited_at) : null,
-    cancelledAt: row.cancelled_at ? String(row.cancelled_at) : null,
+    createdAt: toIsoTimestamp(row.created_at),
+    editedAt: toIsoTimestampOrNull(row.edited_at),
+    cancelledAt: toIsoTimestampOrNull(row.cancelled_at),
     revisionCount: Number(row.revision_count ?? 0),
-    updatedAt: String(row.updated_at ?? row.created_at),
+    updatedAt: toIsoTimestamp(row.updated_at ?? row.created_at),
     version: Number(row.version ?? 1),
   };
 }

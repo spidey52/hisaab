@@ -12,7 +12,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/ledger_repository.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/ledger/ledger_controller.dart';
-import 'features/shell/navigation_controller.dart';
+import 'app/modules/main/controllers/main_controller.dart';
 import 'services/calculator_preference_service.dart';
 import 'services/contact_service.dart';
 import 'services/contact_discovery_consent_service.dart';
@@ -96,7 +96,7 @@ Future<void> main() async {
     ),
     permanent: true,
   );
-  Get.put<NavigationController>(NavigationController(), permanent: true);
+  Get.put<MainController>(MainController(), permanent: true);
 
   runApp(
     HisaabMobileApp(

@@ -196,19 +196,23 @@ class Party {
     id: json['id']?.toString() ?? '',
     reference: json['reference']?.toString() ?? '',
     name: json['name']?.toString() ?? '',
-    shortName: json['shortName']?.toString() ?? '',
+    shortName:
+        _field(json, 'shortName', 'short_name')?.toString() ?? '',
     phone: json['phone']?.toString() ?? '',
-    phoneE164: json['phoneE164']?.toString(),
+    phoneE164: _field(json, 'phoneE164', 'phone_e164')?.toString(),
     notes: json['notes']?.toString() ?? '',
-    groupId: json['groupId']?.toString(),
-    groupName: json['groupName']?.toString(),
-    balancePaise: _asInt(json['balancePaise']),
-    transactionCount: _asInt(json['transactionCount']),
-    archivedAt: _asDate(json['archivedAt']),
+    groupId: _field(json, 'groupId', 'group_id')?.toString(),
+    groupName: _field(json, 'groupName', 'group_name')?.toString(),
+    balancePaise: _asInt(_field(json, 'balancePaise', 'balance_paise')),
+    transactionCount: _asInt(
+      _field(json, 'transactionCount', 'transaction_count'),
+    ),
+    archivedAt: _asDate(_field(json, 'archivedAt', 'archived_at')),
     createdAt:
-        _asDate(json['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
+        _asDate(_field(json, 'createdAt', 'created_at')) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
     version: _asNullableInt(json['version']),
-    updatedAt: _asDate(json['updatedAt']),
+    updatedAt: _asDate(_field(json, 'updatedAt', 'updated_at')),
     localSyncStatus: _syncStatus(json['_localSyncStatus']),
     clientOperationId: json['_clientOperationId']?.toString(),
   );
@@ -331,31 +335,40 @@ class LedgerEntry {
 
   factory LedgerEntry.fromJson(Map<String, dynamic> json) => LedgerEntry(
     id: json['id']?.toString() ?? '',
-    partyId: json['partyId']?.toString() ?? '',
-    partyName: json['partyName']?.toString() ?? '',
+    partyId: _field(json, 'partyId', 'party_id')?.toString() ?? '',
+    partyName: _field(json, 'partyName', 'party_name')?.toString() ?? '',
     sequence: _asInt(json['sequence']),
     action: switch (json['action']) {
       'received' => EntryAction.received,
       'opening_balance' => EntryAction.openingBalance,
       _ => EntryAction.gave,
     },
-    amountPaise: _asInt(json['amountPaise']),
-    balanceEffectPaise: _asInt(json['balanceEffectPaise']),
+    amountPaise: _asInt(_field(json, 'amountPaise', 'amount_paise')),
+    balanceEffectPaise: _asInt(
+      _field(json, 'balanceEffectPaise', 'balance_effect_paise'),
+    ),
     narration: json['narration']?.toString() ?? '',
     entryDate:
-        _asDate(json['entryDate']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-    paymentAccount: json['paymentAccount']?.toString(),
+        _asDate(_field(json, 'entryDate', 'entry_date')) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    paymentAccount: _field(
+      json,
+      'paymentAccount',
+      'payment_account',
+    )?.toString(),
     status: json['status'] == 'cancelled'
         ? EntryStatus.cancelled
         : EntryStatus.posted,
-    createdByName: json['createdByName']?.toString() ?? '',
+    createdByName:
+        _field(json, 'createdByName', 'created_by_name')?.toString() ?? '',
     createdAt:
-        _asDate(json['createdAt']) ?? DateTime.fromMillisecondsSinceEpoch(0),
-    editedAt: _asDate(json['editedAt']),
-    cancelledAt: _asDate(json['cancelledAt']),
-    revisionCount: _asInt(json['revisionCount']),
+        _asDate(_field(json, 'createdAt', 'created_at')) ??
+        DateTime.fromMillisecondsSinceEpoch(0),
+    editedAt: _asDate(_field(json, 'editedAt', 'edited_at')),
+    cancelledAt: _asDate(_field(json, 'cancelledAt', 'cancelled_at')),
+    revisionCount: _asInt(_field(json, 'revisionCount', 'revision_count')),
     version: _asNullableInt(json['version']),
-    updatedAt: _asDate(json['updatedAt']),
+    updatedAt: _asDate(_field(json, 'updatedAt', 'updated_at')),
     localSyncStatus: _syncStatus(json['_localSyncStatus']),
     clientOperationId: json['_clientOperationId']?.toString(),
   );
@@ -540,9 +553,85 @@ int? _asNullableInt(Object? value) {
 }
 
 DateTime? _asDate(Object? value) {
-  final raw = value?.toString();
-  return raw == null || raw.isEmpty ? null : DateTime.tryParse(raw);
+  final raw = value?.toString().trim();
+  if (raw == null || raw.isEmpty) return null;
+  final direct = DateTime.tryParse(raw);
+  if (direct != null) return direct;
+
+  final fromJs = _parseJsDateString(raw);
+  if (fromJs != null) return fromJs;
+
+  // Postgres / Node often send "yyyy-MM-dd HH:mm:ss.sss+00" (space, short offset).
+  var normalized = raw.contains('T') ? raw : raw.replaceFirst(' ', 'T');
+  normalized = normalized.replaceFirstMapped(
+    RegExp(r'(T\d{2}:\d{2}:\d{2}(?:\.\d+)?)([+-]\d{2})$'),
+    (match) => '${match[1]}${match[2]}:00',
+  );
+  final parsed = DateTime.tryParse(normalized);
+  if (parsed != null) return parsed;
+
+  // Last resort: strip trailing short zone and treat as UTC.
+  final withoutZone = RegExp(
+    r'^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?)',
+  ).firstMatch(raw);
+  if (withoutZone != null) {
+    final stamp = withoutZone[1]!.replaceFirst(' ', 'T');
+    return DateTime.tryParse('${stamp}Z') ?? DateTime.tryParse(stamp);
+  }
+  return null;
 }
+
+/// Parses Node `Date.toString()` values such as:
+/// `Thu Sep 10 2026 08:17:53 GMT+0000 (Coordinated Universal Time)`.
+DateTime? _parseJsDateString(String raw) {
+  final match = RegExp(
+    r'^\w{3} (\w{3}) (\d{1,2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT([+-]\d{4})',
+  ).firstMatch(raw);
+  if (match == null) return null;
+
+  const months = <String, int>{
+    'Jan': 1,
+    'Feb': 2,
+    'Mar': 3,
+    'Apr': 4,
+    'May': 5,
+    'Jun': 6,
+    'Jul': 7,
+    'Aug': 8,
+    'Sep': 9,
+    'Oct': 10,
+    'Nov': 11,
+    'Dec': 12,
+  };
+  final month = months[match[1]];
+  if (month == null) return null;
+
+  final day = int.tryParse(match[2]!);
+  final year = int.tryParse(match[3]!);
+  final hour = int.tryParse(match[4]!);
+  final minute = int.tryParse(match[5]!);
+  final second = int.tryParse(match[6]!);
+  if (day == null ||
+      year == null ||
+      hour == null ||
+      minute == null ||
+      second == null) {
+    return null;
+  }
+
+  final offset = match[7]!;
+  final sign = offset.startsWith('-') ? -1 : 1;
+  final offsetHours = int.tryParse(offset.substring(1, 3)) ?? 0;
+  final offsetMinutes = int.tryParse(offset.substring(3, 5)) ?? 0;
+
+  // Wall time is in the stated GMT offset; convert to UTC.
+  return DateTime.utc(year, month, day, hour, minute, second).subtract(
+    Duration(hours: sign * offsetHours, minutes: sign * offsetMinutes),
+  );
+}
+
+Object? _field(Map<String, dynamic> json, String camel, [String? snake]) =>
+    json[camel] ?? (snake == null ? null : json[snake]);
 
 LocalSyncStatus _syncStatus(Object? value) => switch (value?.toString()) {
   'pending' => LocalSyncStatus.pending,

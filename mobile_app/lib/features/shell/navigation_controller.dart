@@ -1,7 +1,6 @@
-import 'package:get/get.dart';
+import '../../app/modules/main/controllers/main_controller.dart';
 
-class NavigationController extends GetxController {
-  final selectedIndex = 0.obs;
-
-  void select(int index) => selectedIndex.value = index;
-}
+/// Historical name for the shell tab controller.
+///
+/// New code should use [MainController] directly.
+typedef NavigationController = MainController;
