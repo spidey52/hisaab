@@ -35,7 +35,18 @@ export const env = createEnv({
       .default(5_000),
     SESSION_SECRET: z.string().min(32).default(DEVELOPMENT_SESSION_SECRET),
     TRUST_PROXY: booleanString.default("false"),
+    /** Dev only: echoes the OTP in the request-otp response and server log. */
     OTP_IN_RESPONSE: booleanString.default("false"),
+    /** How the OTP reaches the user. `notify` sends via the notify service. */
+    OTP_DELIVERY: z.enum(["console", "notify"]).default("notify"),
+    OTP_NOTIFY_BASE_URL: z.string().url().default("https://notify.mgdh.in"),
+    OTP_NOTIFY_SERVICE: z.string().min(1).default("hisaab"),
+    OTP_NOTIFY_TIMEOUT_MS: z.coerce
+      .number()
+      .int()
+      .min(1_000)
+      .max(60_000)
+      .default(10_000),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
@@ -47,5 +58,15 @@ if (env.NODE_ENV === "production") {
   }
   if (env.SESSION_SECRET === DEVELOPMENT_SESSION_SECRET) {
     throw new Error("SESSION_SECRET must be configured for production.");
+  }
+  if (env.OTP_IN_RESPONSE) {
+    console.warn(
+      "[Hisaab] OTP_IN_RESPONSE=true in production: OTP codes are returned to clients. Set it to false.",
+    );
+  }
+  if (env.OTP_DELIVERY === "console") {
+    console.warn(
+      "[Hisaab] OTP_DELIVERY=console in production: OTP codes are only written to the server log.",
+    );
   }
 }

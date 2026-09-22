@@ -25,6 +25,7 @@ import {
   clientIpAddress,
   privateHash,
 } from "../utils/security";
+import { deliverOtp } from "./otp-delivery";
 
 const OTP_LIFETIME_MINUTES = 10;
 const SESSION_LIFETIME_DAYS = 30;
@@ -88,14 +89,13 @@ export function maskPhoneNumber(phoneE164: string) {
 }
 
 export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
-  assertLocalOtpEnabled();
   const phoneE164 = normalizePhoneNumber(phoneInput);
 
   const ipHash = privateHash(clientIpAddress(request));
   const phoneHash = privateHash(phoneE164);
   const challengeId = crypto.randomUUID();
-  const developmentCode = String(randomInt(100_000, 1_000_000));
-  const codeHash = hashOtp(challengeId, phoneE164, developmentCode);
+  const code = String(randomInt(100_000, 1_000_000));
+  const codeHash = hashOtp(challengeId, phoneE164, code);
 
   let blocked: RateLimitSnapshot | null = null;
   try {
@@ -173,12 +173,35 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
     throw error;
   }
 
-  console.info(
-    `[Hisaab local OTP] ${maskPhoneNumber(phoneE164)} code ${developmentCode}`,
-  );
+  let delivery: Awaited<ReturnType<typeof deliverOtp>>;
+  try {
+    delivery = await deliverOtp(phoneE164, code);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[Hisaab OTP] delivery failed for ${maskPhoneNumber(phoneE164)}: ${reason}`,
+    );
+    // Drop the challenge so the failed attempt does not count against the
+    // resend cooldown and the user can retry right away.
+    await db.delete(otpChallenges).where(eq(otpChallenges.id, challengeId));
+    await logAuthEvent(phoneHash, ipHash, "otp_delivery_failed", {
+      delivery: env.OTP_DELIVERY,
+      reason: reason.slice(0, 500),
+    });
+    throw new PhoneAuthError(
+      "We could not send the code right now. Please try again.",
+      502,
+    );
+  }
+
+  if (delivery.channel === "console" || env.OTP_IN_RESPONSE) {
+    console.info(
+      `[Hisaab local OTP] ${maskPhoneNumber(phoneE164)} code ${code}`,
+    );
+  }
 
   await logAuthEvent(phoneHash, ipHash, "otp_requested", {
-    delivery: "console",
+    delivery: delivery.channel,
   });
   await cleanupExpiredAuthData();
 
@@ -188,7 +211,7 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
     maskedPhone: maskPhoneNumber(phoneE164),
     expiresInSeconds: OTP_LIFETIME_MINUTES * 60,
     resendAfterSeconds: RESEND_COOLDOWN_SECONDS,
-    developmentCode,
+    ...(env.OTP_IN_RESPONSE ? { developmentCode: code } : {}),
   };
 }
 
@@ -198,7 +221,6 @@ export async function verifyPhoneOtp(
   codeInput: unknown,
   request: Request,
 ) {
-  assertLocalOtpEnabled();
   const challengeId = typeof challengeIdInput === "string"
     ? challengeIdInput.trim()
     : "";
@@ -423,12 +445,6 @@ async function createSessionForPhone(phoneE164: string, request: Request) {
   return { ...identity, token: rawToken };
 }
 
-function assertLocalOtpEnabled() {
-  if (!env.OTP_IN_RESPONSE) {
-    throw new PhoneAuthError("OTP authentication is not configured.", 503);
-  }
-}
-
 function hashOtp(challengeId: string, phoneE164: string, code: string) {
   return createHmac("sha256", authenticationSecret())
     .update(`${challengeId}:${phoneE164}:${code}`)
@@ -457,6 +473,7 @@ async function logAuthEvent(
   eventType:
     | "otp_requested"
     | "otp_request_blocked"
+    | "otp_delivery_failed"
     | "otp_failed"
     | "otp_approved"
     | "session_created"
