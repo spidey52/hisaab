@@ -34,6 +34,14 @@ const IP_REQUESTS_PER_HOUR = 20;
 const RESEND_COOLDOWN_SECONDS = 60;
 const MAX_OTP_ATTEMPTS = 5;
 
+/**
+ * Fixed test login. 9999999999 is not a real subscriber number, so no SMS
+ * is sent for it and the code is always TEST_PHONE_CODE (used by app-store
+ * reviewers and manual testers).
+ */
+const TEST_PHONE_E164 = "+919999999999";
+const TEST_PHONE_CODE = "5432";
+
 export type SessionIdentity = {
   userId: string;
   phoneE164: string;
@@ -94,7 +102,10 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
   const ipHash = privateHash(clientIpAddress(request));
   const phoneHash = privateHash(phoneE164);
   const challengeId = crypto.randomUUID();
-  const code = String(randomInt(100_000, 1_000_000));
+  const isTestPhone = phoneE164 === TEST_PHONE_E164;
+  const code = isTestPhone
+    ? TEST_PHONE_CODE
+    : String(randomInt(100_000, 1_000_000));
   const codeHash = hashOtp(challengeId, phoneE164, code);
 
   let blocked: RateLimitSnapshot | null = null;
@@ -173,9 +184,11 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
     throw error;
   }
 
-  let delivery: Awaited<ReturnType<typeof deliverOtp>>;
+  let delivery: { channel: "console" | "notify" | "test-fixed" };
   try {
-    delivery = await deliverOtp(phoneE164, code);
+    delivery = isTestPhone
+      ? { channel: "test-fixed" }
+      : await deliverOtp(phoneE164, code);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error(
@@ -194,7 +207,9 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
     );
   }
 
-  if (delivery.channel === "console" || env.OTP_IN_RESPONSE) {
+  if (
+    !isTestPhone && (delivery.channel === "console" || env.OTP_IN_RESPONSE)
+  ) {
     console.info(
       `[Hisaab local OTP] ${maskPhoneNumber(phoneE164)} code ${code}`,
     );
