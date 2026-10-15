@@ -153,7 +153,7 @@ export async function requestPhoneOtp(phoneInput: unknown, request: Request) {
       if (
         (limits?.phone_count ?? 0) >= PHONE_REQUESTS_PER_HOUR ||
         (limits?.ip_count ?? 0) >= IP_REQUESTS_PER_HOUR ||
-        cooldown > 0 && phoneE164 !== '9999999999'
+        cooldown > 0 && phoneE164 !== '+919999999999'
       ) {
         blocked = {
           phoneRequests: limits?.phone_count ?? 0,
